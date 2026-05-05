@@ -1,0 +1,9 @@
+# APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
+# CRITICAL: Make sure the container is PRIVILEGED (unprivileged = 0) in the Proxmox UI.
+
+lxc.apparmor.profile: unconfined
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.mount.auto: proc:rw sys:rw
+lxc.autodev: 1
+lxc.hook.autodev: sh -c "mknod -m 0666 ${LXC_ROOTFS_MOUNT}/dev/binder c 10 236"

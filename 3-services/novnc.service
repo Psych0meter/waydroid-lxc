@@ -1,0 +1,11 @@
+[Unit]
+Description=noVNC Web Interface
+After=wayvnc.service
+Requires=wayvnc.service
+
+[Service]
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 6080 127.0.0.1:5900
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
