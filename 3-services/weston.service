@@ -9,6 +9,7 @@ ExecStartPre=/bin/mkdir -p /run/user/0
 ExecStartPre=/bin/chmod 0700 /run/user/0
 ExecStart=/usr/bin/weston -c /etc/xdg/weston/weston.ini
 Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target

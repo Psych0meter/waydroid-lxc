@@ -1,6 +1,16 @@
 # APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
 # CRITICAL: Make sure the container is PRIVILEGED (unprivileged = 0) in the Proxmox UI.
-
+#
+# ATTENTION SÉCURITÉ : ces 3 lignes désactivent la confinement AppArmor,
+# autorisent l'accès à TOUS les devices cgroup, et ne suppriment AUCUNE
+# capability Linux au conteneur (lxc.cap.drop vide = le CT garde des
+# capabilities normalement retirées par défaut aux conteneurs privilégiés,
+# ex: CAP_SYS_MODULE, CAP_SYS_ADMIN...). C'est la configuration la plus
+# large possible ; elle réduit fortement l'isolation entre ce conteneur et
+# l'hôte Proxmox. C'est un compromis connu et largement documenté dans les
+# guides Waydroid-sur-LXC pour obtenir l'accès au device binder sans
+# recompiler de module noyau. Ne déployez ce conteneur que sur un hôte/LAN
+# de confiance, et ne lui donnez pas d'accès direct à Internet non filtré.
 lxc.apparmor.profile: unconfined
 lxc.cgroup2.devices.allow: a
 lxc.cap.drop:

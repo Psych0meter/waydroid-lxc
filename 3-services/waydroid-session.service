@@ -1,0 +1,25 @@
+[Unit]
+Description=Waydroid session (Android UI) auto-start
+# waydroid-container.service est le service fourni par le paquet waydroid
+# lui-même (gère le conteneur LXC Android interne) ; il doit tourner avant
+# de pouvoir démarrer une session.
+After=weston.service waydroid-container.service
+Requires=weston.service waydroid-container.service
+
+[Service]
+Type=simple
+Environment="XDG_RUNTIME_DIR=/run/user/0"
+Environment="WAYLAND_DISPLAY=wayland-1"
+ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
+# 'waydroid session start' tourne en PREMIER PLAN (processus bloquant) tant
+# que la session est active — contrairement au script manuel d'origine qui
+# le mettait en arrière-plan avec '&'. C'est donc le ExecStart principal ici.
+ExecStart=/usr/bin/waydroid session start
+# show-full-ui bloque lui aussi en premier plan: on le lance en arrière-plan
+# via ce sous-shell pour ne pas bloquer la transaction de démarrage systemd.
+ExecStartPost=/bin/sh -c 'sleep 5 && /usr/bin/waydroid show-full-ui &'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

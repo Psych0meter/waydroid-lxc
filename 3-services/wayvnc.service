@@ -6,6 +6,11 @@ Requires=weston.service
 [Service]
 Environment="XDG_RUNTIME_DIR=/run/user/0"
 Environment="WAYLAND_DISPLAY=wayland-1"
+# 'After=/Requires=' n'attend que le démarrage de l'UNITÉ weston.service, pas
+# la création effective du socket Wayland (asynchrone) : on l'attend activement.
+ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
+# Par défaut, n'écoute que sur localhost: voir README (section Sécurité)
+# pour l'exposer sur le LAN via EXPOSE_LAN=yes lors de l'installation.
 ExecStart=/usr/bin/wayvnc 127.0.0.1 5900
 Restart=always
 RestartSec=3
