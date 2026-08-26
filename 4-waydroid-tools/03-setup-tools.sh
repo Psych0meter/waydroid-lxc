@@ -6,6 +6,8 @@
 # their content first if your threat model requires it.
 set -euo pipefail
 
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}
+
 SPOOF_REPO="Quackdoc/waydroid-scripts"
 SPOOF_REF="${SPOOF_REF:-main}"
 GPS_REPO="ayasa520/waydroid_stuff"
@@ -13,6 +15,9 @@ GPS_REF="${GPS_REF:-main}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
+
+echo "Applying device spoofing (Pixel 5)..."
+bash ./spoof-device.sh
 
 echo "Downloading Quackdoc's spoof-device.sh (ref: ${SPOOF_REF})..."
 wget -qO spoof-device.sh "https://raw.githubusercontent.com/${SPOOF_REPO}/${SPOOF_REF}/spoof-device.sh"

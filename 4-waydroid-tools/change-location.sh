@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}"
+
 if [[ "$#" -ne 2 ]]; then
   echo "Usage: $0 <latitude> <longitude>"
   echo "Example: $0 48.8584 2.2945"
