@@ -1,17 +1,22 @@
 [Unit]
 Description=WayVNC Server
-After=weston.service
-Requires=weston.service
+After=sway.service
+Requires=sway.service
 
 [Service]
-Environment="XDG_RUNTIME_DIR=/run/user/0"
+Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
 Environment="WAYLAND_DISPLAY=wayland-1"
-# 'After=/Requires=' n'attend que le démarrage de l'UNITÉ weston.service, pas
+Environment="HOME=/root"
+# 'After=/Requires=' n'attend que le démarrage de l'UNITÉ sway.service, pas
 # la création effective du socket Wayland (asynchrone) : on l'attend activement.
 ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
+# -C pointe vers un fichier existant (même vide) : sans ça, wayvnc plante au
+# démarrage ("Failed to load config. Success") si $HOME n'est pas défini,
+# ce qui est le cas par défaut pour un service systemd sans 'User=' — d'où
+# aussi le 'Environment=HOME=/root' ci-dessus, en ceinture et bretelles.
 # Par défaut, n'écoute que sur localhost: voir README (section Sécurité)
 # pour l'exposer sur le LAN via EXPOSE_LAN=yes lors de l'installation.
-ExecStart=/usr/bin/wayvnc 127.0.0.1 5900
+ExecStart=/usr/bin/wayvnc -C /etc/wayvnc/config 127.0.0.1 5900
 Restart=always
 RestartSec=3
 

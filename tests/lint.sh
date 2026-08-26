@@ -59,14 +59,14 @@ echo "OK"
 echo ""
 echo "== Vérification des références de chemins entre fichiers =="
 # 02-install-services.sh doit référencer des fichiers qui existent réellement
-for ref in weston.service wayvnc.service novnc.service waydroid-session.service wait-for-wayland-socket.sh; do
+for ref in sway.service wayvnc.service novnc.service waydroid-session.service wait-for-wayland-socket.sh ensure-waydroid-dbus.sh mount-emulated-storage.sh; do
   if [[ ! -f "3-services/${ref}" ]]; then
     echo "MISSING FILE referenced by 02-install-services.sh: 3-services/${ref}"
     FAIL=1
   fi
 done
-if [[ ! -f "2-lxc-setup/weston.ini" ]]; then
-  echo "MISSING FILE: 2-lxc-setup/weston.ini"
+if [[ ! -f "2-lxc-setup/sway-headless-config" ]]; then
+  echo "MISSING FILE: 2-lxc-setup/sway-headless-config"
   FAIL=1
 fi
 echo "OK"

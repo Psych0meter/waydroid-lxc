@@ -17,29 +17,41 @@ EXPOSE_LAN="${EXPOSE_LAN:-no}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-echo "Copying weston.ini..."
-mkdir -p /etc/xdg/weston
-cp "${REPO_ROOT}/2-lxc-setup/weston.ini" /etc/xdg/weston/weston.ini
+echo "Installing Sway headless config..."
+mkdir -p /etc/sway
+cp "${REPO_ROOT}/2-lxc-setup/sway-headless-config" /etc/sway/config-headless
 
 echo "Installing helper scripts..."
 install -m 0755 "${SCRIPT_DIR}/wait-for-wayland-socket.sh" /usr/local/bin/wait-for-wayland-socket.sh
+install -m 0755 "${SCRIPT_DIR}/ensure-waydroid-dbus.sh" /usr/local/bin/ensure-waydroid-dbus.sh
+install -m 0755 "${SCRIPT_DIR}/mount-emulated-storage.sh" /usr/local/bin/mount-emulated-storage.sh
+
+# wayvnc essaie TOUJOURS de charger un fichier de config, même sans -C, et
+# plante ("Failed to load config. Success") si aucun n'existe — bug connu
+# (https://github.com/any1/wayvnc/issues/10). On lui en fournit un vide,
+# référencé explicitement via -C dans wayvnc.service pour ne pas dépendre
+# de $HOME (non défini par systemd pour un service root sans User=).
+mkdir -p /etc/wayvnc
+touch /etc/wayvnc/config
 
 echo "Installing systemd services..."
-cp "${SCRIPT_DIR}/weston.service" /etc/systemd/system/
+cp "${SCRIPT_DIR}/sway.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/wayvnc.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/novnc.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/waydroid-session.service" /etc/systemd/system/
 
 if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  echo "!!! EXPOSE_LAN=yes : wayvnc et noVNC vont écouter sur 0.0.0.0 SANS AUTHENTIFICATION."
-  sed -i 's/127\.0\.0\.1 5900/0.0.0.0 5900/' /etc/systemd/system/wayvnc.service
+  echo "!!! EXPOSE_LAN=yes : noVNC va écouter sur 0.0.0.0 SANS AUTHENTIFICATION."
+  # Seul websockify (noVNC) a besoin d'écouter sur le LAN : il se connecte à
+  # wayvnc en interne via 127.0.0.1, qui lui reste toujours en local — pas
+  # besoin d'exposer le protocole VNC brut (port 5900) en plus du web (6080).
   sed -i 's/127\.0\.0\.1:6080 127\.0\.0\.1:5900/0.0.0.0:6080 127.0.0.1:5900/' /etc/systemd/system/novnc.service
 fi
 
 echo "Reloading systemd and enabling services..."
 systemctl daemon-reload
 
-systemctl enable --now weston
+systemctl enable --now sway
 systemctl enable --now wayvnc
 systemctl enable --now novnc
 

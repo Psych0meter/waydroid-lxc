@@ -21,7 +21,22 @@ apt-get update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 echo "Installing prerequisites..."
-apt-get install -y curl ca-certificates iptables dnsmasq weston wayvnc novnc websockify python3 git wget kmod nano procps lsb-release
+# NOTE: 'sway' (compositeur wlroots), pas 'weston' — wayvnc dépend de
+# protocoles wlroots (virtual-pointer, xdg-output v3+) que Weston n'implémente
+# pas. Voir docs/DEBUGGING_AND_TESTS.md pour le détail de cette incompatibilité.
+apt-get install -y curl ca-certificates iptables dnsmasq sway wayvnc novnc websockify python3 git wget kmod nano procps lsb-release dbus dbus-daemon dbus-bin
+
+# Le paquet dnsmasq s'auto-active comme service système au moment de son
+# installation (comportement par défaut Debian) et écoute en --local-service
+# sur toutes les interfaces locales. Il entre alors en conflit de port avec
+# l'instance ad-hoc que /usr/lib/waydroid/data/scripts/waydroid-net.sh essaie
+# de lancer sur le bridge waydroid0 (192.168.240.1:53), faisant échouer
+# 'waydroid session start' avec "Address already in use". Waydroid gère son
+# propre dnsmasq à la demande : le service système n'est pas nécessaire.
+if systemctl is-enabled --quiet dnsmasq 2>/dev/null || systemctl is-active --quiet dnsmasq 2>/dev/null; then
+  echo "Désactivation du service dnsmasq système (conflit avec le dnsmasq ad-hoc de waydroid-net.sh)..."
+  systemctl disable --now dnsmasq
+fi
 
 echo "Installing Waydroid..."
 if ! command -v waydroid >/dev/null 2>&1; then

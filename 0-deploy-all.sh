@@ -86,6 +86,9 @@ export var_os=debian
 export var_version=13
 export var_tags="waydroid"
 export var_nesting=1
+# Requis pour le stockage "emulated" d'Android (FUSE) : sans ça, l'app
+# Storage et le stockage interne peuvent mal fonctionner.
+export var_fuse=yes
 export var_verbose=no
 [[ -n "${CT_ID}" ]] && export var_ctid="${CT_ID}"
 
@@ -107,6 +110,16 @@ if [[ -z "${FOUND_CTID}" ]] || ! pct config "${FOUND_CTID}" >/dev/null 2>&1; the
 fi
 CTID="${FOUND_CTID}"
 echo "    -> Conteneur créé: CTID=${CTID}"
+
+# Filet de sécurité : s'assurer que fuse=1 est bien dans les features du CT,
+# au cas où var_fuse n'aurait pas été correctement appliqué à la création
+# (nécessaire pour le stockage "emulated" d'Android).
+CURRENT_FEATURES="$(pct config "${CTID}" | awk -F': ' '/^features:/ {print $2}')"
+if [[ "${CURRENT_FEATURES}" != *fuse=1* ]]; then
+  echo "    -> Ajout de fuse=1 aux features du CT (absent après création)"
+  NEW_FEATURES="${CURRENT_FEATURES:+${CURRENT_FEATURES},}fuse=1"
+  pct set "${CTID}" -features "${NEW_FEATURES}"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Injection de la configuration binder / apparmor / cgroup

@@ -60,16 +60,58 @@ ssh -L 6080:127.0.0.1:6080 root@<LXC_IP>
 
 puis ouvrez `http://127.0.0.1:6080/vnc.html`.
 
+Avec `--expose-lan` / `EXPOSE_LAN=yes`, seul **noVNC** (le pont web,
+port 6080) est exposé sur toutes les interfaces ; `wayvnc` (le protocole
+VNC brut, port 5900) reste toujours en local — `websockify` s'y connecte en
+interne, il n'y a pas besoin de l'exposer en plus pour un accès navigateur.
+Pratique si vous accédez déjà à votre homelab via VPN (le VPN fait alors
+office de périmètre de sécurité, puisque noVNC lui-même n'a aucune
+authentification) :
+
+```bash
+./0-deploy-all.sh --expose-lan
+```
+
+puis, depuis un poste connecté au VPN : `http://<LXC_IP>:6080/vnc.html`
+
 ## Structure du projet
 
 * `0-deploy-all.sh` — Orchestrateur complet (hôte → conteneur → services).
 * `1-proxmox-host/` — Scripts/config appliqués sur l'hôte Proxmox.
 * `2-lxc-setup/` — Installation de Waydroid et dépendances dans le conteneur.
-* `3-services/` — Unités systemd (Weston, WayVNC, noVNC, session Waydroid).
-* `4-waydroid-tools/` — Spoofing d'appareil, GPS, wrapper de démarrage manuel.
+* `3-services/` — Unités systemd (Sway headless, WayVNC, noVNC, session Waydroid).
+* `4-waydroid-tools/` — Spoofing d'appareil, GPS, wrapper de démarrage
+  manuel, contournement du bug de stockage émulé du Play Store.
 * `tests/` — `lint.sh` (statique, sans Proxmox) et `smoke-test.sh` (à
   exécuter dans le conteneur après déploiement).
 * `docs/` — Méthodologie de debug détaillée.
+
+## Choix d'architecture : Sway, pas Weston
+
+Le compositeur Wayland utilisé est **Sway** (basé sur wlroots), en mode
+headless (`WLR_BACKENDS=headless`, sans périphériques `libinput`). Ce n'est
+pas un choix arbitraire : `wayvnc` dépend de protocoles spécifiques à
+wlroots (`zwlr_virtual_pointer_manager_v1` pour le clavier/souris distants,
+une révision de `xdg-output` que Weston n'implémente pas) — avec Weston,
+`wayvnc` échoue systématiquement au démarrage
+(`Failed to initialise wayland` / `invalid version for global
+zxdg_output_manager_v1`). C'est la combinaison officiellement documentée par
+le projet wayvnc et par l'ArchWiki pour un usage headless.
+
+## Limitations connues
+
+* **Play Integrity / SafetyNet** : certaines applications (souvent
+  bancaires, DRM, anti-triche) refusent de démarrer avec un message du
+  type *"For security reasons, app will close as it does not support
+  devices with modified system"*. C'est un comportement **volontaire** de
+  l'application, pas un bug de ce déploiement : Waydroid n'est pas un
+  appareil Android certifié par Google (pas de bootloader verrouillé, pas
+  d'attestation matérielle). `4-waydroid-tools/spoof-device.sh` (usurpation
+  des propriétés système) peut suffire pour les applications qui ne
+  vérifient que l'intégrité "basique", mais **aucun contournement fiable
+  n'existe** pour les applications exigeant l'intégrité "STRONG"
+  (attestation matérielle réelle) — c'est une limitation fondamentale, pas
+  une question de configuration.
 
 ## Sécurité
 

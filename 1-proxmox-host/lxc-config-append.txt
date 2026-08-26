@@ -1,7 +1,7 @@
 # APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
 # CRITICAL: Make sure the container is PRIVILEGED (unprivileged = 0) in the Proxmox UI.
 #
-# ATTENTION SÉCURITÉ : ces 3 lignes désactivent la confinement AppArmor,
+# ATTENTION SÉCURITÉ : ces lignes désactivent la confinement AppArmor,
 # autorisent l'accès à TOUS les devices cgroup, et ne suppriment AUCUNE
 # capability Linux au conteneur (lxc.cap.drop vide = le CT garde des
 # capabilities normalement retirées par défaut aux conteneurs privilégiés,
@@ -16,4 +16,27 @@ lxc.cgroup2.devices.allow: a
 lxc.cap.drop:
 lxc.mount.auto: proc:rw sys:rw
 lxc.autodev: 1
-lxc.hook.autodev: sh -c "mknod -m 0666 ${LXC_ROOTFS_MOUNT}/dev/binder c 10 236"
+# PAS de hook mknod pour /dev/binder ici : Waydroid crée lui-même son
+# propre /dev/binder via binderfs (mount -t binder + symlink) à chaque
+# démarrage de session. Un /dev/binder statique pré-créé ici entrerait en
+# conflit avec ce mécanisme (le lien symbolique de Waydroid échoue si le
+# fichier existe déjà), laissant Waydroid utiliser un device binder
+# incohérent et provoquant des erreurs "Can't get binder version from
+# /dev/binder: Inappropriate ioctl for device". Le module binder_linux
+# chargé par enable-binder.sh suffit à rendre le type de filesystem
+# "binder" disponible pour ce mount — aucune action supplémentaire requise
+# côté hôte ou LXC.
+
+# Loop devices pour le montage des images Waydroid (system.img, vendor.img)
+# en lecture seule. 'optional' évite un échec de démarrage du conteneur si
+# un de ces device nodes n'existe pas côté hôte (voir enable-binder.sh, qui
+# les crée) ; 'create=file' laisse LXC créer le point de montage cible.
+lxc.mount.entry: /dev/loop-control dev/loop-control none bind,optional,create=file
+lxc.mount.entry: /dev/loop0 dev/loop0 none bind,optional,create=file
+lxc.mount.entry: /dev/loop1 dev/loop1 none bind,optional,create=file
+lxc.mount.entry: /dev/loop2 dev/loop2 none bind,optional,create=file
+lxc.mount.entry: /dev/loop3 dev/loop3 none bind,optional,create=file
+lxc.mount.entry: /dev/loop4 dev/loop4 none bind,optional,create=file
+lxc.mount.entry: /dev/loop5 dev/loop5 none bind,optional,create=file
+lxc.mount.entry: /dev/loop6 dev/loop6 none bind,optional,create=file
+lxc.mount.entry: /dev/loop7 dev/loop7 none bind,optional,create=file

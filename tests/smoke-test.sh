@@ -12,10 +12,16 @@ fail()  { echo "  [FAIL] $1"; FAIL=1; }
 
 echo "== Devices =="
 [[ -e /dev/binder ]] && pass "/dev/binder présent" || fail "/dev/binder absent (voir 1-proxmox-host/)"
+if ls /dev/loop0 /dev/loop-control >/dev/null 2>&1; then
+  pass "/dev/loop* et /dev/loop-control présents"
+else
+  fail "/dev/loop* ou /dev/loop-control absents (voir 1-proxmox-host/lxc-config-append.txt)"
+fi
+[[ -e /dev/fuse ]] && pass "/dev/fuse présent" || fail "/dev/fuse absent (feature Proxmox 'fuse=1' manquante, voir 0-deploy-all.sh)"
 
 echo ""
 echo "== Paquets =="
-for bin in weston wayvnc websockify waydroid; do
+for bin in sway wayvnc websockify waydroid; do
   if command -v "$bin" >/dev/null 2>&1; then
     pass "binaire '$bin' trouvé"
   else
@@ -25,7 +31,7 @@ done
 
 echo ""
 echo "== Services systemd =="
-for svc in weston wayvnc novnc waydroid-container; do
+for svc in sway wayvnc novnc waydroid-container; do
   if systemctl is-active --quiet "$svc"; then
     pass "service $svc actif"
   else
@@ -40,7 +46,7 @@ fi
 
 echo ""
 echo "== Socket Wayland =="
-SOCK="${XDG_RUNTIME_DIR:-/run/user/0}/${WAYLAND_DISPLAY:-wayland-1}"
+SOCK="${XDG_RUNTIME_DIR:-/run/waydroid-wayland}/${WAYLAND_DISPLAY:-wayland-1}"
 [[ -S "$SOCK" ]] && pass "socket Wayland présent ($SOCK)" || fail "socket Wayland absent ($SOCK)"
 
 echo ""
@@ -50,6 +56,27 @@ if command -v ss >/dev/null 2>&1; then
   ss -ltnp 2>/dev/null | grep -q ':6080' && pass "websockify écoute sur :6080" || fail "rien n'écoute sur :6080"
 else
   echo "  ('ss' indisponible, étape ignorée — installez iproute2)"
+fi
+
+echo ""
+echo "== Bus D-Bus dédié Waydroid =="
+if [[ -S /run/waydroid-dbus/session ]]; then
+  if dbus-send --address="unix:path=/run/waydroid-dbus/session" --print-reply \
+      --dest=org.freedesktop.DBus / org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1; then
+    pass "bus D-Bus dédié /run/waydroid-dbus/session répond"
+  else
+    fail "socket /run/waydroid-dbus/session présent mais ne répond pas"
+  fi
+else
+  fail "/run/waydroid-dbus/session absent (waydroid-session a-t-il déjà démarré ?)"
+fi
+
+echo ""
+echo "== Conflit dnsmasq système =="
+if systemctl is-active --quiet dnsmasq 2>/dev/null; then
+  fail "dnsmasq.service système actif — entrera en conflit avec le dnsmasq ad-hoc de waydroid-net.sh sur waydroid0 ('systemctl disable --now dnsmasq')"
+else
+  pass "dnsmasq.service système inactif (pas de conflit avec waydroid-net.sh)"
 fi
 
 echo ""
