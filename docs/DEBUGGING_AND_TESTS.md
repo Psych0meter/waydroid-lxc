@@ -223,11 +223,18 @@ Store download paths ("Can't create file" errors in logcat rather than
 
 ## Phase 4: Test Device Spoofing
 1. Stop Waydroid: `systemctl stop waydroid-session` (or `waydroid session stop`)
-2. Navigate to `4-waydroid-tools/` and run `./spoof-device.sh`
-3. Select your desired profile from the menu.
-4. Restart Waydroid: `systemctl start waydroid-session`
-5. Open the Android settings app inside your web UI and navigate to "About
+2. Navigate to `4-waydroid-tools/` and run `./spoof-device.sh`. Note: the
+   upstream script (Quackdoc/waydroid-scripts) applies a single fixed
+   Pixel 5 profile - there is no menu or profile choice, despite what
+   older instructions may say.
+3. Restart Waydroid: `systemctl start waydroid-session`
+4. Open the Android settings app inside your web UI and navigate to "About
    Phone" to verify the new identity.
+* **Known issue**: `sudo: command not found`. The upstream script
+  unconditionally shells out to `sudo`, which isn't installed in this
+  minimal container (everything here already runs as root, so elevation
+  isn't actually needed). Fix with `apt-get install -y sudo`, or edit your
+  local copy of `spoof-device.sh` to drop the `sudo ` prefix.
 
 ## Phase 5: Test Fake GPS Injection
 1. Inside the Android web UI, open an app that requires location (like a
@@ -236,6 +243,11 @@ Store download paths ("Can't create file" errors in logcat rather than
 3. Run the wrapper script with coordinates:
    `./change-location.sh 48.8584 2.2945` (Coordinates for the Eiffel Tower).
 4. Verify the location pin updates in real-time in the Android UI.
+* **Known issue**: `03-setup-tools.sh` fails to download `fake_gps.py` -
+  the default `GPS_REPO` (`ayasa520/waydroid_stuff`) has no such file on
+  `main`. GPS injection needs a working `GPS_REPO`/`GPS_REF` pointing at a
+  source that actually hosts the script; until then, this phase can't be
+  tested.
 
 ## Phase 6: Redeploying / re-running
 
