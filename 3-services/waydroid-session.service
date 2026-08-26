@@ -1,8 +1,7 @@
 [Unit]
 Description=Waydroid session (Android UI) auto-start
-# waydroid-container.service is provided by the waydroid package itself
-# (manages the internal Android LXC container); it must be running before a
-# session can start.
+# waydroid-container.service (from the waydroid package) manages the
+# internal Android container and must be up first.
 After=sway.service waydroid-container.service
 Requires=sway.service waydroid-container.service
 
@@ -11,30 +10,15 @@ Type=simple
 Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
 Environment="WAYLAND_DISPLAY=wayland-1"
 Environment="HOME=/root"
-# Without a login session, no session D-Bus exists by default: 'waydroid
-# session start' would otherwise fail with "Unable to autolaunch a
-# dbus-daemon without a $DISPLAY for X11". Start a dedicated one instead.
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/waydroid-dbus/session"
 ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
-# Waydroid's generated internal LXC config expects a PulseAudio socket at
-# $XDG_RUNTIME_DIR/pulse/native to bind-mount into the nested Android
-# container. No audio server runs here: create a dummy file so that mount
-# succeeds (no sound, but startup isn't blocked). Without this: "Failed to
-# mount .../pulse/native ... No such file or directory" and the Android
-# container fails to start. Recreated on every start since /run is a tmpfs
-# wiped on LXC container restart.
+# Dummy PulseAudio socket: Waydroid's internal LXC config bind-mounts
+# $XDG_RUNTIME_DIR/pulse/native and fails to start without it (no audio
+# server runs here). Recreated every start since /run is a tmpfs.
 ExecStartPre=/bin/sh -c 'mkdir -p /run/waydroid-wayland/pulse && touch /run/waydroid-wayland/pulse/native'
 ExecStartPre=/usr/local/bin/ensure-waydroid-dbus.sh
-# 'waydroid session start' runs in the FOREGROUND (blocking) for as long as
-# the session is active - unlike the original manual script, which
-# backgrounded it with '&'. It's the main ExecStart here for that reason.
 ExecStart=/usr/bin/waydroid session start
-# show-full-ui also blocks in the foreground: run it in the background via
-# this subshell so it doesn't block systemd's start transaction.
 ExecStartPost=/bin/sh -c 'sleep 5 && /usr/bin/waydroid show-full-ui &'
-# Forces the "emulated" storage to mount (see mount-emulated-storage.sh):
-# without this, the Play Store and other apps wrongly report "Not enough
-# storage space". Runs in the background (has its own retry loop).
 ExecStartPost=/bin/sh -c '/usr/local/bin/mount-emulated-storage.sh &'
 Restart=on-failure
 RestartSec=5

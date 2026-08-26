@@ -2,22 +2,15 @@
 #
 # 0-deploy-all.sh - all-in-one orchestrator, run on the Proxmox host.
 #
-# This script:
-#   1. Prepares the host (binder/loop kernel modules) via 1-proxmox-host/enable-binder.sh
-#   2. Creates a privileged Debian 13 LXC via the community-scripts/ProxmoxVE
-#      helper (https://community-scripts.org/scripts/debian)
-#   3. Injects the binder/apparmor/cgroup config into /etc/pve/lxc/<CTID>.conf
-#   4. Restarts the container
-#   5. Copies this repo into the container and runs, in order:
-#        2-lxc-setup/01-install-waydroid.sh
-#        3-services/02-install-services.sh
-#        4-waydroid-tools/03-setup-tools.sh
+# Pipeline: prepares the host, creates a privileged Debian 13 LXC via
+# community-scripts/ProxmoxVE, injects the binder/apparmor/cgroup config,
+# restarts the container, then runs the install scripts inside it in order
+# (2-lxc-setup -> 3-services -> 4-waydroid-tools).
 #
-# NOTE: ct/debian.sh from community-scripts is an interactive (whiptail) tool.
-# This wrapper pre-fills the var_* environment variables it reads to force
-# "Default Settings" mode (see misc/build.func upstream). If a future version
-# changes that behavior, a whiptail dialog may still pop up - run this script
-# from a real interactive console (not cron/CI) in that case.
+# ct/debian.sh from community-scripts is normally interactive (whiptail);
+# this wrapper pre-fills its var_* environment variables to force
+# "Default Settings" mode. Run from a real console (not cron/CI) in case a
+# future version still shows a dialog.
 #
 # Usage:
 #   ./0-deploy-all.sh [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR]
@@ -53,12 +46,12 @@ while [[ $# -gt 0 ]]; do
       echo "                By default, access goes through an SSH tunnel (see README)."
       exit 0
       ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    *) echo "Error: unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
 if [[ $EUID -ne 0 ]]; then
-  echo "This script must be run as root on the Proxmox node." >&2
+  echo "Error: this script must be run as root on the Proxmox node." >&2
   exit 1
 fi
 
@@ -76,7 +69,7 @@ bash "${SCRIPT_DIR}/1-proxmox-host/enable-binder.sh"
 echo "==> [2/5] Creating the Debian LXC via community-scripts/ProxmoxVE"
 
 export var_hostname="${CT_HOSTNAME}"
-export var_unprivileged=0   # Required: the binder device and hardware access need a privileged CT
+export var_unprivileged=0   # Required: binder device and hardware access need a privileged CT
 export var_cpu="${CT_CPU}"
 export var_ram="${CT_RAM}"
 export var_disk="${CT_DISK}"
@@ -85,9 +78,7 @@ export var_os=debian
 export var_version=13
 export var_tags="waydroid"
 export var_nesting=1
-# Required for Android's "emulated" storage (FUSE): without it, the Storage
-# app and internal storage can misbehave.
-export var_fuse=yes
+export var_fuse=yes        # Required for Android's FUSE-based "emulated" storage
 export var_verbose=no
 [[ -n "${CT_ID}" ]] && export var_ctid="${CT_ID}"
 
@@ -110,8 +101,7 @@ fi
 CTID="${FOUND_CTID}"
 echo "    -> Container created: CTID=${CTID}"
 
-# Safety net: make sure fuse=1 ended up in the CT features, in case var_fuse
-# wasn't honored at creation time (required for Android's "emulated" storage).
+# Safety net in case var_fuse wasn't honored at creation time.
 CURRENT_FEATURES="$(pct config "${CTID}" | awk -F': ' '/^features:/ {print $2}')"
 if [[ "${CURRENT_FEATURES}" != *fuse=1* ]]; then
   echo "    -> Adding fuse=1 to the CT features (missing after creation)"

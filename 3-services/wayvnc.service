@@ -7,15 +7,10 @@ Requires=sway.service
 Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
 Environment="WAYLAND_DISPLAY=wayland-1"
 Environment="HOME=/root"
-# 'After=/Requires=' only waits for the sway.service UNIT to start, not for
-# the Wayland socket to actually exist (asynchronous) - wait for it actively.
 ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
-# -C points to an existing (even empty) file: without it, wayvnc crashes at
-# startup ("Failed to load config. Success") when $HOME is unset, which is
-# the default for a systemd service without 'User=' - hence also the
-# 'Environment=HOME=/root' above, belt and suspenders.
-# Only listens on localhost by default: see README ("Security" section) to
-# expose it on the LAN via EXPOSE_LAN=yes at install time.
+# -C plus HOME=/root work around a wayvnc startup crash when $HOME is
+# unset (see docs/DEBUGGING_AND_TESTS.md, Phase 2).
+# Listens on localhost only by default; see README "Security" for EXPOSE_LAN=yes.
 ExecStart=/usr/bin/wayvnc -C /etc/wayvnc/config 127.0.0.1 5900
 Restart=always
 RestartSec=3

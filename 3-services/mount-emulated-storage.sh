@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
-# Forces the "emulated;0" volume (Android internal storage) to mount after
-# the session starts.
-#
-# Observed in practice: on the GAPPS Waydroid image used by this repo, vold
-# marks this volume UNMOUNTABLE at boot and never retries on its own,
-# regardless of /dev/fuse's state. An explicit 'sm mount' call (the modern
-# StorageManager tool - unlike 'vdc', whose raw text commands are no longer
-# supported on recent Android versions) is enough to bring it to MOUNTED.
-# Without this script, the Play Store and other apps wrongly report "Not
-# enough storage space" even though /data has free space (visible via
-# 'waydroid shell -- dumpsys mount': state=UNMOUNTABLE, while 'waydroid
-# shell -- dumpsys diskstats' shows plenty of free space).
-set -uo pipefail
+# Forces the Android "emulated;0" storage volume to mount. vold marks it
+# UNMOUNTABLE at boot on this image and never retries on its own; an
+# explicit 'sm mount' brings it to MOUNTED. Without this, the Play Store
+# and other apps wrongly report "Not enough storage space" (see
+# docs/DEBUGGING_AND_TESTS.md, Phase 3).
+set -uo pipefail   # no -e: failed attempts must fall through to the retry loop
 
 for _ in $(seq 1 30); do
   if waydroid shell -- sm mount 'emulated;0' >/dev/null 2>&1; then
@@ -20,5 +13,5 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-echo "Warning: could not mount the emulated;0 volume after several attempts (is the Android service actually running?)." >&2
+echo "Warning: could not mount emulated;0 after several attempts (is the Android service running?)." >&2
 exit 0

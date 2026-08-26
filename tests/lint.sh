@@ -36,12 +36,10 @@ echo ""
 echo "== systemd-analyze verify (if available) =="
 if command -v systemd-analyze >/dev/null 2>&1; then
   for f in 3-services/*.service; do
-    if ! systemd-analyze verify "$f" 2>&1 | grep -v '^$'; then
-      : # systemd-analyze verify writes to stderr even on success for some
-        # warnings (e.g. unit not installed); only fail the lint on an
-        # explicit PARSING error, handled below.
-    fi
+    systemd-analyze verify "$f" 2>&1 || true
   done
+  echo "(informational only: the binaries/units these reference won't exist"
+  echo " outside the target container, so warnings above are expected)"
 else
   echo "systemd-analyze not available, skipping this step."
 fi
@@ -58,7 +56,6 @@ echo "OK"
 
 echo ""
 echo "== Checking cross-file path references =="
-# 02-install-services.sh must reference files that actually exist
 for ref in sway.service wayvnc.service novnc.service waydroid-session.service wait-for-wayland-socket.sh ensure-waydroid-dbus.sh mount-emulated-storage.sh; do
   if [[ ! -f "3-services/${ref}" ]]; then
     echo "MISSING FILE referenced by 02-install-services.sh: 3-services/${ref}"

@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# Works around a known Waydroid limitation: the emulated filesystem
-# (/storage/emulated/0) doesn't automatically create the standard
-# Android/data, Android/obb, Android/media tree that the Play Store (and
-# many apps) need to download/install. Without it, the Play Store wrongly
-# shows "Free up space" even with plenty of room on /data.
-# Reference: https://github.com/waydroid/waydroid/issues/530
-#            https://github.com/waydroid/waydroid/issues/1911
+# Creates the standard Android/data, Android/obb, Android/media tree under
+# /storage/emulated/0 that Waydroid doesn't scaffold automatically - without
+# it, the Play Store wrongly reports low storage.
+# Refs: waydroid/waydroid#530, waydroid/waydroid#1911
 #
-# Re-run this after resetting Waydroid ('waydroid init -f'), or if a
-# specific app still fails with a "Can't create
-# file:///storage/emulated/0/Android/data/<pkg>/..." error in 'waydroid
-# logcat': in that case, add a targeted mkdir -p for the exact path shown in
-# the logcat.
+# Re-run after 'waydroid init -f', or if 'waydroid logcat' shows a
+# "Can't create file:///storage/emulated/0/Android/data/<pkg>/..." error
+# for a specific path.
 set -euo pipefail
 
 if ! command -v waydroid >/dev/null 2>&1; then

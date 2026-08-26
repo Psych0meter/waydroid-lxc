@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Waits for the Wayland socket created by the compositor (Sway) to exist
-# before starting a client (wayvnc). systemd's 'After=/Requires=' only
-# guarantees UNIT start order, not that the Wayland socket already exists on
-# disk (the compositor creates it asynchronously) - hence this active wait,
-# replacing the manual "sleep 2" from the original instructions.
+# Waits for the compositor's Wayland socket: systemd's After=/Requires=
+# only orders unit starts, not the socket's asynchronous creation.
 set -euo pipefail
 
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/waydroid-wayland}"
@@ -16,5 +13,5 @@ for _ in $(seq 1 "${TIMEOUT_SECONDS}"); do
   sleep 1
 done
 
-echo "Timeout: ${SOCKET_PATH} never appeared after ${TIMEOUT_SECONDS}s." >&2
+echo "Error: ${SOCKET_PATH} never appeared after ${TIMEOUT_SECONDS}s." >&2
 exit 1

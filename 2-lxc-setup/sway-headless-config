@@ -1,16 +1,9 @@
-# Minimal Sway configuration for a headless session that only acts as a
-# wlroots compositor for wayvnc + Waydroid (no local interactive use, no
-# terminal, no bar). Deliberately missing Sway's default bindsyms
-# (mod+Return, mod+d, ...) so they don't intercept input meant for the
-# Android UI relayed through wayvnc.
-#
-# Resolution matches the usual Android portrait size (previously set in
-# weston.ini).
-output * resolution 720x1280
+# Headless Sway config: a wlroots compositor for wayvnc + Waydroid only -
+# no terminal, no bar, no default keybindings (they'd intercept input meant
+# for the Android UI relayed through wayvnc).
+output * resolution 720x1280   # matches the usual Android portrait size
 
-# Waydroid talks to the compositor through its dedicated Wayland extension,
-# not Xwayland - disable it to save resources.
-xwayland disable
+xwayland disable   # Waydroid talks Wayland directly, doesn't need it
 
 bar {
     mode invisible

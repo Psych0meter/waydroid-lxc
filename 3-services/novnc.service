@@ -4,8 +4,7 @@ After=wayvnc.service
 Requires=wayvnc.service
 
 [Service]
-# Only listens on localhost by default: see README ("Security" section) to
-# expose it on the LAN via EXPOSE_LAN=yes at install time.
+# Listens on localhost only by default; see README "Security" for EXPOSE_LAN=yes.
 ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 127.0.0.1:6080 127.0.0.1:5900
 Restart=always
 RestartSec=3
