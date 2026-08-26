@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Garantit qu'un bus D-Bus de session est disponible pour Waydroid.
+# Makes sure a session D-Bus is available for Waydroid.
 #
-# Waydroid (côté client Python) a besoin d'un DBUS_SESSION_BUS_ADDRESS
-# valide. Un service systemd sans 'User=' (donc sans session de login) n'en
-# a pas par défaut, et la tentative d'auto-launch de dbus-python échoue avec
-# "Unable to autolaunch a dbus-daemon without a $DISPLAY for X11". On
-# démarre donc ici un dbus-daemon --session dédié, à adresse fixe, réutilisé
-# entre redémarrages du service tant qu'il répond.
+# Waydroid's Python client needs a valid DBUS_SESSION_BUS_ADDRESS. A systemd
+# service without 'User=' (so no login session) doesn't have one by default,
+# and dbus-python's auto-launch attempt fails with "Unable to autolaunch a
+# dbus-daemon without a $DISPLAY for X11". This starts a dedicated
+# 'dbus-daemon --session' at a fixed address, reused across service restarts
+# as long as it's still responding.
 set -euo pipefail
 
 SOCK_DIR="/run/waydroid-dbus"
@@ -28,5 +28,5 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 
-echo "Timeout: dbus-daemon n'a jamais créé ${SOCK_PATH}" >&2
+echo "Timeout: dbus-daemon never created ${SOCK_PATH}" >&2
 exit 1

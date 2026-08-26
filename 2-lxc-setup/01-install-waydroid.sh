@@ -4,15 +4,15 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 if [[ $EUID -ne 0 ]]; then
-  echo "Ce script doit être exécuté en root dans le conteneur." >&2
+  echo "This script must be run as root inside the container." >&2
   exit 1
 fi
 
 if [[ ! -e /dev/binder ]]; then
-  echo "Erreur: /dev/binder est absent." >&2
-  echo "Vérifiez que 1-proxmox-host/enable-binder.sh a été exécuté sur l'hôte" >&2
-  echo "et que 1-proxmox-host/lxc-config-append.txt a été ajouté au .conf du CT" >&2
-  echo "(puis que le conteneur a été redémarré)." >&2
+  echo "Error: /dev/binder is missing." >&2
+  echo "Check that 1-proxmox-host/enable-binder.sh ran on the host and that" >&2
+  echo "1-proxmox-host/lxc-config-append.txt was added to the CT's .conf" >&2
+  echo "(then that the container was restarted)." >&2
   exit 1
 fi
 
@@ -21,20 +21,20 @@ apt-get update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 echo "Installing prerequisites..."
-# NOTE: 'sway' (compositeur wlroots), pas 'weston' — wayvnc dépend de
-# protocoles wlroots (virtual-pointer, xdg-output v3+) que Weston n'implémente
-# pas. Voir docs/DEBUGGING_AND_TESTS.md pour le détail de cette incompatibilité.
+# NOTE: 'sway' (a wlroots compositor), not 'weston' - wayvnc depends on
+# wlroots-specific protocols (virtual-pointer, xdg-output v3+) that Weston
+# doesn't implement. See docs/DEBUGGING_AND_TESTS.md for details.
 apt-get install -y curl ca-certificates iptables dnsmasq sway wayvnc novnc websockify python3 git wget kmod nano procps lsb-release dbus dbus-daemon dbus-bin
 
-# Le paquet dnsmasq s'auto-active comme service système au moment de son
-# installation (comportement par défaut Debian) et écoute en --local-service
-# sur toutes les interfaces locales. Il entre alors en conflit de port avec
-# l'instance ad-hoc que /usr/lib/waydroid/data/scripts/waydroid-net.sh essaie
-# de lancer sur le bridge waydroid0 (192.168.240.1:53), faisant échouer
-# 'waydroid session start' avec "Address already in use". Waydroid gère son
-# propre dnsmasq à la demande : le service système n'est pas nécessaire.
+# The dnsmasq package auto-enables itself as a system service on install
+# (default Debian behavior) and listens with --local-service on all local
+# interfaces. That conflicts on port 53 with the ad-hoc instance that
+# /usr/lib/waydroid/data/scripts/waydroid-net.sh starts on the waydroid0
+# bridge, making 'waydroid session start' fail with "Address already in
+# use". Waydroid manages its own dnsmasq on demand, so the system service
+# isn't needed.
 if systemctl is-enabled --quiet dnsmasq 2>/dev/null || systemctl is-active --quiet dnsmasq 2>/dev/null; then
-  echo "Désactivation du service dnsmasq système (conflit avec le dnsmasq ad-hoc de waydroid-net.sh)..."
+  echo "Disabling the system dnsmasq service (conflicts with waydroid-net.sh's ad-hoc instance)..."
   systemctl disable --now dnsmasq
 fi
 
@@ -43,12 +43,12 @@ if ! command -v waydroid >/dev/null 2>&1; then
   curl -s https://repo.waydro.id | bash
   apt-get install -y waydroid
 else
-  echo "Waydroid déjà installé, on passe."
+  echo "Waydroid already installed, skipping."
 fi
 
 echo "Initializing Waydroid with GAPPS and software rendering..."
 if [[ -d /var/lib/waydroid/images ]]; then
-  echo "Waydroid déjà initialisé (/var/lib/waydroid/images existe), on ne relance pas 'waydroid init'."
+  echo "Waydroid already initialized (/var/lib/waydroid/images exists), skipping 'waydroid init'."
 else
   waydroid init -s GAPPS
 fi

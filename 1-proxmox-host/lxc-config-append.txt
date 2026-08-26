@@ -1,36 +1,33 @@
 # APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
 # CRITICAL: Make sure the container is PRIVILEGED (unprivileged = 0) in the Proxmox UI.
 #
-# ATTENTION SÉCURITÉ : ces lignes désactivent la confinement AppArmor,
-# autorisent l'accès à TOUS les devices cgroup, et ne suppriment AUCUNE
-# capability Linux au conteneur (lxc.cap.drop vide = le CT garde des
-# capabilities normalement retirées par défaut aux conteneurs privilégiés,
-# ex: CAP_SYS_MODULE, CAP_SYS_ADMIN...). C'est la configuration la plus
-# large possible ; elle réduit fortement l'isolation entre ce conteneur et
-# l'hôte Proxmox. C'est un compromis connu et largement documenté dans les
-# guides Waydroid-sur-LXC pour obtenir l'accès au device binder sans
-# recompiler de module noyau. Ne déployez ce conteneur que sur un hôte/LAN
-# de confiance, et ne lui donnez pas d'accès direct à Internet non filtré.
+# SECURITY WARNING: these lines disable AppArmor confinement, allow access
+# to ALL cgroup devices, and drop NO Linux capabilities (empty lxc.cap.drop
+# means the CT keeps capabilities normally stripped from privileged
+# containers by default, e.g. CAP_SYS_MODULE, CAP_SYS_ADMIN...). This is
+# about as permissive as it gets; it significantly weakens isolation between
+# this container and the Proxmox host. It's a known, widely documented
+# trade-off in Waydroid-on-LXC guides to get binder device access without
+# rebuilding a kernel module. Only deploy this container on a trusted
+# host/LAN, and don't give it unfiltered direct internet access.
 lxc.apparmor.profile: unconfined
 lxc.cgroup2.devices.allow: a
 lxc.cap.drop:
 lxc.mount.auto: proc:rw sys:rw
 lxc.autodev: 1
-# PAS de hook mknod pour /dev/binder ici : Waydroid crée lui-même son
-# propre /dev/binder via binderfs (mount -t binder + symlink) à chaque
-# démarrage de session. Un /dev/binder statique pré-créé ici entrerait en
-# conflit avec ce mécanisme (le lien symbolique de Waydroid échoue si le
-# fichier existe déjà), laissant Waydroid utiliser un device binder
-# incohérent et provoquant des erreurs "Can't get binder version from
-# /dev/binder: Inappropriate ioctl for device". Le module binder_linux
-# chargé par enable-binder.sh suffit à rendre le type de filesystem
-# "binder" disponible pour ce mount — aucune action supplémentaire requise
-# côté hôte ou LXC.
+# No mknod hook for /dev/binder here: Waydroid creates its own /dev/binder
+# via binderfs (mount -t binder + symlink) on every session start. A static
+# /dev/binder pre-created here would conflict with that mechanism (Waydroid's
+# symlink fails if the file already exists), leaving it with an inconsistent
+# binder device and "Can't get binder version from /dev/binder: Inappropriate
+# ioctl for device" errors. The binder_linux module loaded by
+# enable-binder.sh is enough to make the "binder" filesystem type available
+# for this mount - nothing else is needed on the host or in the LXC.
 
-# Loop devices pour le montage des images Waydroid (system.img, vendor.img)
-# en lecture seule. 'optional' évite un échec de démarrage du conteneur si
-# un de ces device nodes n'existe pas côté hôte (voir enable-binder.sh, qui
-# les crée) ; 'create=file' laisse LXC créer le point de montage cible.
+# Loop devices for read-only mounting of Waydroid's images (system.img,
+# vendor.img). 'optional' avoids a container start failure if one of these
+# device nodes doesn't exist on the host (see enable-binder.sh, which creates
+# them); 'create=file' lets LXC create the mount target.
 lxc.mount.entry: /dev/loop-control dev/loop-control none bind,optional,create=file
 lxc.mount.entry: /dev/loop0 dev/loop0 none bind,optional,create=file
 lxc.mount.entry: /dev/loop1 dev/loop1 none bind,optional,create=file

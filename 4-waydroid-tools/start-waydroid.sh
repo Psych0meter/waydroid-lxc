@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Démarrage manuel de Waydroid (alternative à 'systemctl start waydroid-session'
-# si le service systemd n'est pas utilisé).
+# Manual Waydroid startup (alternative to 'systemctl start waydroid-session'
+# if you're not using the systemd service).
 set -euo pipefail
 export XDG_RUNTIME_DIR=/run/waydroid-wayland
 export WAYLAND_DISPLAY=wayland-1
@@ -9,17 +9,17 @@ export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/waydroid-dbus/session"
 if command -v /usr/local/bin/ensure-waydroid-dbus.sh >/dev/null 2>&1; then
   /usr/local/bin/ensure-waydroid-dbus.sh
 else
-  echo "Attention: /usr/local/bin/ensure-waydroid-dbus.sh introuvable (02-install-services.sh a-t-il été exécuté ?)." >&2
-  echo "Sans bus D-Bus de session, 'waydroid session start' échouera avec une erreur d'autolaunch." >&2
+  echo "Warning: /usr/local/bin/ensure-waydroid-dbus.sh not found (did 02-install-services.sh run?)." >&2
+  echo "Without a session D-Bus, 'waydroid session start' will fail with an autolaunch error." >&2
 fi
 
 echo "Starting Waydroid session..."
 waydroid session start &
 SESSION_PID=$!
 
-# 'waydroid session start' tourne en premier plan tant que la session vit ;
-# on attend qu'il ait fini son initialisation (waydroid status == RUNNING)
-# plutôt qu'un délai fixe.
+# 'waydroid session start' runs in the foreground for as long as the session
+# is alive; wait for it to finish initializing (waydroid status == RUNNING)
+# instead of a fixed delay.
 for _ in $(seq 1 30); do
   if waydroid status 2>/dev/null | grep -q "Session:.*RUNNING"; then
     break

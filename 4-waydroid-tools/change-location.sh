@@ -10,8 +10,8 @@ if [[ "$#" -ne 2 ]]; then
 fi
 
 if [[ ! -f "${SCRIPT_DIR}/fake_gps.py" ]]; then
-  echo "Erreur: ${SCRIPT_DIR}/fake_gps.py introuvable." >&2
-  echo "Lancez d'abord 03-setup-tools.sh." >&2
+  echo "Error: ${SCRIPT_DIR}/fake_gps.py not found." >&2
+  echo "Run 03-setup-tools.sh first." >&2
   exit 1
 fi
 

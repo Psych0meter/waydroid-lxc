@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
 #
-# 0-deploy-all.sh — Orchestrateur "clé en main" à exécuter sur l'hôte Proxmox.
+# 0-deploy-all.sh - all-in-one orchestrator, run on the Proxmox host.
 #
-# Ce script :
-#   1. Prépare l'hôte (modules binder/loop) via 1-proxmox-host/enable-binder.sh
-#   2. Crée un LXC Debian 13 PRIVILÉGIÉ via le script communautaire
-#      community-scripts/ProxmoxVE (https://community-scripts.org/scripts/debian)
-#   3. Injecte la configuration binder/apparmor/cgroup dans /etc/pve/lxc/<CTID>.conf
-#   4. Redémarre le conteneur
-#   5. Copie le dépôt dans le conteneur et exécute dans l'ordre :
+# This script:
+#   1. Prepares the host (binder/loop kernel modules) via 1-proxmox-host/enable-binder.sh
+#   2. Creates a privileged Debian 13 LXC via the community-scripts/ProxmoxVE
+#      helper (https://community-scripts.org/scripts/debian)
+#   3. Injects the binder/apparmor/cgroup config into /etc/pve/lxc/<CTID>.conf
+#   4. Restarts the container
+#   5. Copies this repo into the container and runs, in order:
 #        2-lxc-setup/01-install-waydroid.sh
 #        3-services/02-install-services.sh
 #        4-waydroid-tools/03-setup-tools.sh
 #
-# IMPORTANT — Le script communautaire ct/debian.sh est un outil interactif
-# (whiptail). Ce wrapper force le mode "Default Settings" en pré-remplissant
-# les variables d'environnement var_* qu'il sait lire (cf. code source de
-# misc/build.func). Si une future version de community-scripts change ce
-# comportement, un dialogue whiptail peut malgré tout s'afficher : lancez
-# alors ce script depuis une vraie console interactive (pas un cron/CI).
+# NOTE: ct/debian.sh from community-scripts is an interactive (whiptail) tool.
+# This wrapper pre-fills the var_* environment variables it reads to force
+# "Default Settings" mode (see misc/build.func upstream). If a future version
+# changes that behavior, a whiptail dialog may still pop up - run this script
+# from a real interactive console (not cron/CI) in that case.
 #
 # Usage:
 #   ./0-deploy-all.sh [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR]
@@ -26,7 +25,7 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# 0. Pré-requis et arguments
+# 0. Defaults and argument parsing
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -50,34 +49,34 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan]"
       echo ""
-      echo "  --expose-lan  Expose noVNC/wayvnc sur 0.0.0.0 SANS authentification (déconseillé)."
-      echo "                Par défaut, l'accès se fait via tunnel SSH (voir README)."
+      echo "  --expose-lan  Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
+      echo "                By default, access goes through an SSH tunnel (see README)."
       exit 0
       ;;
-    *) echo "Option inconnue: $1" >&2; exit 1 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
 if [[ $EUID -ne 0 ]]; then
-  echo "Ce script doit être exécuté en root sur le nœud Proxmox." >&2
+  echo "This script must be run as root on the Proxmox node." >&2
   exit 1
 fi
 
 if ! command -v pct >/dev/null 2>&1; then
-  echo "Erreur: 'pct' introuvable. Ce script doit tourner sur un hôte Proxmox VE." >&2
+  echo "Error: 'pct' not found. This script must run on a Proxmox VE host." >&2
   exit 1
 fi
 
-echo "==> [1/5] Préparation de l'hôte Proxmox (modules binder/loop)"
+echo "==> [1/5] Preparing the Proxmox host (binder/loop kernel modules)"
 bash "${SCRIPT_DIR}/1-proxmox-host/enable-binder.sh"
 
 # ---------------------------------------------------------------------------
-# 1. Création du conteneur via community-scripts (Debian 13, PRIVILÉGIÉ)
+# 1. Container creation via community-scripts (Debian 13, PRIVILEGED)
 # ---------------------------------------------------------------------------
-echo "==> [2/5] Création du LXC Debian via community-scripts/ProxmoxVE"
+echo "==> [2/5] Creating the Debian LXC via community-scripts/ProxmoxVE"
 
 export var_hostname="${CT_HOSTNAME}"
-export var_unprivileged=0   # Requis: le binder device et l'accès matériel nécessitent un CT privilégié
+export var_unprivileged=0   # Required: the binder device and hardware access need a privileged CT
 export var_cpu="${CT_CPU}"
 export var_ram="${CT_RAM}"
 export var_disk="${CT_DISK}"
@@ -86,17 +85,17 @@ export var_os=debian
 export var_version=13
 export var_tags="waydroid"
 export var_nesting=1
-# Requis pour le stockage "emulated" d'Android (FUSE) : sans ça, l'app
-# Storage et le stockage interne peuvent mal fonctionner.
+# Required for Android's "emulated" storage (FUSE): without it, the Storage
+# app and internal storage can misbehave.
 export var_fuse=yes
 export var_verbose=no
 [[ -n "${CT_ID}" ]] && export var_ctid="${CT_ID}"
 
-# NEXTID est déterminé par le script lui-même si var_ctid n'est pas fourni.
+# NEXTID is picked by the script itself when var_ctid isn't set.
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh)"
 
-# Retrouver le CTID effectivement créé (le plus récent conteneur portant le tag "waydroid"
-# et le hostname demandé, au cas où var_ctid n'était pas fourni).
+# Find the CTID that was actually created (most recent container with the
+# "waydroid" tag and the requested hostname), in case var_ctid wasn't set.
 if [[ -n "${CT_ID}" ]]; then
   FOUND_CTID="${CT_ID}"
 else
@@ -104,51 +103,50 @@ else
 fi
 
 if [[ -z "${FOUND_CTID}" ]] || ! pct config "${FOUND_CTID}" >/dev/null 2>&1; then
-  echo "Erreur: impossible de déterminer le CTID du conteneur créé." >&2
-  echo "Vérifiez avec 'pct list' puis relancez avec --ctid <ID> pour reprendre le déploiement." >&2
+  echo "Error: could not determine the CTID of the created container." >&2
+  echo "Check with 'pct list', then rerun with --ctid <ID> to resume deployment." >&2
   exit 1
 fi
 CTID="${FOUND_CTID}"
-echo "    -> Conteneur créé: CTID=${CTID}"
+echo "    -> Container created: CTID=${CTID}"
 
-# Filet de sécurité : s'assurer que fuse=1 est bien dans les features du CT,
-# au cas où var_fuse n'aurait pas été correctement appliqué à la création
-# (nécessaire pour le stockage "emulated" d'Android).
+# Safety net: make sure fuse=1 ended up in the CT features, in case var_fuse
+# wasn't honored at creation time (required for Android's "emulated" storage).
 CURRENT_FEATURES="$(pct config "${CTID}" | awk -F': ' '/^features:/ {print $2}')"
 if [[ "${CURRENT_FEATURES}" != *fuse=1* ]]; then
-  echo "    -> Ajout de fuse=1 aux features du CT (absent après création)"
+  echo "    -> Adding fuse=1 to the CT features (missing after creation)"
   NEW_FEATURES="${CURRENT_FEATURES:+${CURRENT_FEATURES},}fuse=1"
   pct set "${CTID}" -features "${NEW_FEATURES}"
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Injection de la configuration binder / apparmor / cgroup
+# 2. Injecting the binder / apparmor / cgroup configuration
 # ---------------------------------------------------------------------------
-echo "==> [3/5] Application de la configuration LXC (binder device, apparmor)"
+echo "==> [3/5] Applying the LXC configuration (binder device, apparmor)"
 
 CONF_FILE="/etc/pve/lxc/${CTID}.conf"
 if [[ ! -f "${CONF_FILE}" ]]; then
-  echo "Erreur: ${CONF_FILE} introuvable." >&2
+  echo "Error: ${CONF_FILE} not found." >&2
   exit 1
 fi
 
-# Idempotent: on ne réinjecte pas si déjà présent
-if ! grep -q "lxc.hook.autodev" "${CONF_FILE}"; then
+# Idempotent: skip re-injecting if a marker directive is already present.
+if ! grep -q "lxc.apparmor.profile: unconfined" "${CONF_FILE}"; then
   {
     echo ""
     grep -v '^#' "${SCRIPT_DIR}/1-proxmox-host/lxc-config-append.txt"
   } >> "${CONF_FILE}"
-  echo "    -> Configuration binder ajoutée à ${CONF_FILE}"
+  echo "    -> Binder configuration appended to ${CONF_FILE}"
 else
-  echo "    -> Configuration binder déjà présente, on ne touche pas à ${CONF_FILE}"
+  echo "    -> Binder configuration already present, leaving ${CONF_FILE} untouched"
 fi
 
-echo "==> Redémarrage du conteneur ${CTID}"
+echo "==> Restarting container ${CTID}"
 pct stop "${CTID}" >/dev/null 2>&1 || true
 sleep 2
 pct start "${CTID}"
 
-echo "==> Attente de la disponibilité réseau du conteneur..."
+echo "==> Waiting for the container's network to come up..."
 for _ in $(seq 1 30); do
   if pct exec "${CTID}" -- true >/dev/null 2>&1; then
     break
@@ -157,13 +155,13 @@ for _ in $(seq 1 30); do
 done
 
 # ---------------------------------------------------------------------------
-# 3. Copie du dépôt dans le conteneur et exécution du pipeline
+# 3. Copying the repo into the container and running the pipeline
 # ---------------------------------------------------------------------------
-echo "==> [4/5] Copie des scripts dans le conteneur et installation de Waydroid"
+echo "==> [4/5] Copying scripts into the container and installing Waydroid"
 
 REMOTE_DIR="/opt/waydroid-lxc-deploy"
 pct exec "${CTID}" -- mkdir -p "${REMOTE_DIR}"
-# pct push ne gère qu'un fichier à la fois: on archive puis on extrait côté conteneur.
+# 'pct push' only handles one file at a time: archive first, extract inside the container.
 TMP_TAR="$(mktemp)"
 tar -C "${SCRIPT_DIR}" -czf "${TMP_TAR}" \
   2-lxc-setup 3-services 4-waydroid-tools
@@ -171,38 +169,38 @@ pct push "${CTID}" "${TMP_TAR}" "${REMOTE_DIR}/payload.tar.gz"
 rm -f "${TMP_TAR}"
 pct exec "${CTID}" -- tar -C "${REMOTE_DIR}" -xzf "${REMOTE_DIR}/payload.tar.gz"
 
-echo "    -> Installation de Waydroid (peut prendre plusieurs minutes)..."
+echo "    -> Installing Waydroid (this can take a few minutes)..."
 pct exec "${CTID}" -- bash "${REMOTE_DIR}/2-lxc-setup/01-install-waydroid.sh"
 
-echo "    -> Installation des services (weston/wayvnc/novnc)..."
+echo "    -> Installing services (sway/wayvnc/novnc)..."
 pct exec "${CTID}" -- env "EXPOSE_LAN=${EXPOSE_LAN}" bash "${REMOTE_DIR}/3-services/02-install-services.sh"
 
-echo "    -> Téléchargement des outils Waydroid (spoofing/GPS)..."
+echo "    -> Fetching Waydroid tools (device spoofing/GPS)..."
 pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && bash 03-setup-tools.sh"
 
-echo "==> [5/5] Démarrage de la session Waydroid"
+echo "==> [5/5] Starting the Waydroid session"
 pct exec "${CTID}" -- systemctl enable --now waydroid-session.service
 
 CT_IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"
 
 if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  ACCESS_MSG="Accès noVNC : http://${CT_IP:-<IP_DU_CTID>}:6080/vnc.html
-   ATTENTION : exposé sur le LAN SANS authentification (--expose-lan)."
+  ACCESS_MSG="noVNC access: http://${CT_IP:-<CTID_IP>}:6080/vnc.html
+   WARNING: exposed on the LAN WITHOUT authentication (--expose-lan)."
 else
-  ACCESS_MSG="Accès noVNC (via tunnel SSH, aucun accès direct exposé) :
-     ssh -L 6080:127.0.0.1:6080 root@${CT_IP:-<IP_DU_CTID>}
-     puis ouvrez http://127.0.0.1:6080/vnc.html"
+  ACCESS_MSG="noVNC access (via SSH tunnel, nothing exposed directly):
+     ssh -L 6080:127.0.0.1:6080 root@${CT_IP:-<CTID_IP>}
+     then open http://127.0.0.1:6080/vnc.html"
 fi
 
 cat <<EOF
 
 ============================================================
- Déploiement terminé.
+ Deployment complete.
    CTID           : ${CTID}
    ${ACCESS_MSG}
-   Répertoire     : ${REMOTE_DIR} (dans le conteneur)
+   Directory      : ${REMOTE_DIR} (inside the container)
 
- Voir la section "Sécurité" du README (conteneur privilégié,
- apparmor unconfined, accès VNC) avant toute mise en production.
+ See the "Security" section of the README (privileged container,
+ apparmor unconfined, VNC access) before using this in production.
 ============================================================
 EOF

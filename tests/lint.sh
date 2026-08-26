@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lint statique de tous les scripts bash + validation basique des unités
-# systemd. Ne nécessite ni Proxmox ni LXC : peut tourner en CI.
+# Static lint for all bash scripts, plus basic validation of the systemd
+# units. Needs neither Proxmox nor an LXC: can run in CI.
 #
 # Usage: ./tests/lint.sh
 set -uo pipefail
@@ -10,7 +10,7 @@ cd "${REPO_ROOT}" || exit 1
 
 FAIL=0
 
-echo "== bash -n (syntaxe) =="
+echo "== bash -n (syntax) =="
 while IFS= read -r -d '' f; do
   if ! bash -n "$f"; then
     echo "SYNTAX ERROR: $f"
@@ -29,25 +29,25 @@ if command -v shellcheck >/dev/null 2>&1; then
     fi
   done < <(find . -name '*.sh' -print0)
 else
-  echo "shellcheck non installé, étape ignorée (apt-get install shellcheck)."
+  echo "shellcheck not installed, skipping this step (apt-get install shellcheck)."
 fi
 
 echo ""
-echo "== systemd-analyze verify (si disponible) =="
+echo "== systemd-analyze verify (if available) =="
 if command -v systemd-analyze >/dev/null 2>&1; then
   for f in 3-services/*.service; do
     if ! systemd-analyze verify "$f" 2>&1 | grep -v '^$'; then
-      : # systemd-analyze verify écrit sur stderr même en cas de succès pour
-        # certains warnings (ex: unité non installée) ; on ne fait échouer
-        # le lint que sur une erreur de PARSING explicite plus bas.
+      : # systemd-analyze verify writes to stderr even on success for some
+        # warnings (e.g. unit not installed); only fail the lint on an
+        # explicit PARSING error, handled below.
     fi
   done
 else
-  echo "systemd-analyze non disponible, étape ignorée."
+  echo "systemd-analyze not available, skipping this step."
 fi
 
 echo ""
-echo "== Validation manuelle des .service (paires clé=valeur) =="
+echo "== Manual .service validation (key=value pairs) =="
 for f in 3-services/*.service; do
   if ! grep -q '^\[Unit\]' "$f" || ! grep -q '^\[Service\]' "$f"; then
     echo "MISSING SECTION: $f"
@@ -57,8 +57,8 @@ done
 echo "OK"
 
 echo ""
-echo "== Vérification des références de chemins entre fichiers =="
-# 02-install-services.sh doit référencer des fichiers qui existent réellement
+echo "== Checking cross-file path references =="
+# 02-install-services.sh must reference files that actually exist
 for ref in sway.service wayvnc.service novnc.service waydroid-session.service wait-for-wayland-socket.sh ensure-waydroid-dbus.sh mount-emulated-storage.sh; do
   if [[ ! -f "3-services/${ref}" ]]; then
     echo "MISSING FILE referenced by 02-install-services.sh: 3-services/${ref}"

@@ -1,143 +1,138 @@
 # Proxmox LXC Waydroid Deployment
 
-Infrastructure-as-Code pour déployer un environnement Android headless
-(Waydroid) dans un conteneur LXC Debian 13 sur Proxmox, avec accès distant
-via navigateur (noVNC), spoofing d'identité d'appareil, et injection GPS.
+Infrastructure-as-code to deploy a headless Android environment (Waydroid)
+inside a Debian 13 LXC container on Proxmox, with browser-based remote
+access (noVNC), device identity spoofing, and GPS injection.
 
-## Déploiement en une commande (recommandé)
+## One-command deployment (recommended)
 
-Sur l'hôte Proxmox, en root :
+On the Proxmox host, as root:
 
 ```bash
 ./0-deploy-all.sh --hostname waydroid --cpu 4 --ram 4096 --disk 16
 ```
 
-Ce script :
-1. Charge les modules noyau `binder`/`loop` sur l'hôte.
-2. Crée le conteneur Debian 13 **privilégié** via le script communautaire
-   [community-scripts/ProxmoxVE](https://community-scripts.org/scripts/debian).
-3. Injecte la configuration binder/apparmor/cgroup dans `/etc/pve/lxc/<CTID>.conf`
-   et redémarre le conteneur.
-4. Copie ce dépôt dans le conteneur et exécute dans l'ordre l'installation
-   de Waydroid, des services systemd, puis des outils de spoofing/GPS.
-5. Active `waydroid-session.service` (démarrage automatique au boot).
+This script:
+1. Loads the `binder`/`loop` kernel modules on the host.
+2. Creates a **privileged** Debian 13 container via the
+   [community-scripts/ProxmoxVE](https://community-scripts.org/scripts/debian)
+   helper script.
+3. Injects the binder/apparmor/cgroup configuration into
+   `/etc/pve/lxc/<CTID>.conf` and restarts the container.
+4. Copies this repo into the container and runs, in order, the Waydroid
+   install, the systemd services, then the spoofing/GPS tools.
+5. Enables `waydroid-session.service` (auto-start on boot).
 
-Par défaut, **noVNC n'est accessible que via tunnel SSH** (voir "Sécurité"
-ci-dessous). Pour l'exposer directement sur le LAN (sans mot de passe) :
+By default, **noVNC is only reachable via an SSH tunnel** (see "Security"
+below). To expose it directly on the LAN (without a password):
 
 ```bash
 ./0-deploy-all.sh --expose-lan
 ```
 
-`community-scripts/ProxmoxVE` est un projet tiers indépendant de ce dépôt ;
-`0-deploy-all.sh` télécharge et exécute son script `ct/debian.sh` à chaque
-lancement. Si vous préférez ne pas exécuter de code tiers automatiquement,
-créez le conteneur manuellement (voir "Déploiement manuel" plus bas) puis
-reprenez à partir de l'étape 3 avec `--ctid <ID>`.
+`community-scripts/ProxmoxVE` is an independent third-party project;
+`0-deploy-all.sh` downloads and runs its `ct/debian.sh` script on every run.
+If you'd rather not run third-party code automatically, create the
+container manually (see "Manual deployment" below) and resume from step 3
+with `--ctid <ID>`.
 
-## Déploiement manuel (étape par étape)
+## Manual deployment (step by step)
 
-1. `1-proxmox-host/enable-binder.sh` sur l'hôte Proxmox.
-2. Créer un LXC **privilégié** Debian 13 depuis l'UI Proxmox (ou via
+1. Run `1-proxmox-host/enable-binder.sh` on the Proxmox host.
+2. Create a **privileged** Debian 13 LXC from the Proxmox UI (or via
    `community-scripts/ProxmoxVE`).
-3. Ajouter le contenu de `1-proxmox-host/lxc-config-append.txt` (hors
-   commentaires) à `/etc/pve/lxc/<VMID>.conf`, puis redémarrer le conteneur.
-4. Dans le conteneur : `2-lxc-setup/01-install-waydroid.sh`
-5. Puis : `EXPOSE_LAN=no 3-services/02-install-services.sh`
-6. Puis : `4-waydroid-tools/03-setup-tools.sh`
+3. Append the contents of `1-proxmox-host/lxc-config-append.txt` (minus
+   comments) to `/etc/pve/lxc/<VMID>.conf`, then restart the container.
+4. Inside the container: `2-lxc-setup/01-install-waydroid.sh`
+5. Then: `EXPOSE_LAN=no 3-services/02-install-services.sh`
+6. Then: `4-waydroid-tools/03-setup-tools.sh`
 7. `systemctl start waydroid-session`
-8. Accès : voir le message affiché en fin d'installation, ou section
-   "Accès à l'interface" ci-dessous.
+8. Access: see the message printed at the end of installation, or the
+   "Accessing the interface" section below.
 
-## Accès à l'interface
+## Accessing the interface
 
-Par défaut (sans `--expose-lan` / `EXPOSE_LAN=yes`), wayvnc et noVNC
-n'écoutent que sur `127.0.0.1` **dans le conteneur**. Depuis votre poste :
+By default (without `--expose-lan` / `EXPOSE_LAN=yes`), wayvnc and noVNC
+only listen on `127.0.0.1` **inside the container**. From your machine:
 
 ```bash
 ssh -L 6080:127.0.0.1:6080 root@<LXC_IP>
 ```
 
-puis ouvrez `http://127.0.0.1:6080/vnc.html`.
+then open `http://127.0.0.1:6080/vnc.html`.
 
-Avec `--expose-lan` / `EXPOSE_LAN=yes`, seul **noVNC** (le pont web,
-port 6080) est exposé sur toutes les interfaces ; `wayvnc` (le protocole
-VNC brut, port 5900) reste toujours en local — `websockify` s'y connecte en
-interne, il n'y a pas besoin de l'exposer en plus pour un accès navigateur.
-Pratique si vous accédez déjà à votre homelab via VPN (le VPN fait alors
-office de périmètre de sécurité, puisque noVNC lui-même n'a aucune
-authentification) :
+With `--expose-lan` / `EXPOSE_LAN=yes`, only **noVNC** (the web bridge, port
+6080) is exposed on all interfaces; `wayvnc` (the raw VNC protocol, port
+5900) always stays local - `websockify` connects to it internally, so
+there's no need to expose it too for browser access. Handy if you already
+reach your homelab over a VPN (the VPN then acts as the security perimeter,
+since noVNC itself has no authentication):
 
 ```bash
 ./0-deploy-all.sh --expose-lan
 ```
 
-puis, depuis un poste connecté au VPN : `http://<LXC_IP>:6080/vnc.html`
+then, from a machine connected to the VPN: `http://<LXC_IP>:6080/vnc.html`
 
-## Structure du projet
+## Project layout
 
-* `0-deploy-all.sh` — Orchestrateur complet (hôte → conteneur → services).
-* `1-proxmox-host/` — Scripts/config appliqués sur l'hôte Proxmox.
-* `2-lxc-setup/` — Installation de Waydroid et dépendances dans le conteneur.
-* `3-services/` — Unités systemd (Sway headless, WayVNC, noVNC, session Waydroid).
-* `4-waydroid-tools/` — Spoofing d'appareil, GPS, wrapper de démarrage
-  manuel, contournement du bug de stockage émulé du Play Store.
-* `tests/` — `lint.sh` (statique, sans Proxmox) et `smoke-test.sh` (à
-  exécuter dans le conteneur après déploiement).
-* `docs/` — Méthodologie de debug détaillée.
+* `0-deploy-all.sh` - Full orchestrator (host -> container -> services).
+* `1-proxmox-host/` - Scripts/config applied on the Proxmox host.
+* `2-lxc-setup/` - Installs Waydroid and its dependencies in the container.
+* `3-services/` - systemd units (Sway headless, WayVNC, noVNC, Waydroid session).
+* `4-waydroid-tools/` - Device spoofing, GPS, manual startup wrapper, Play
+  Store emulated-storage workaround.
+* `tests/` - `lint.sh` (static, no Proxmox needed) and `smoke-test.sh` (run
+  inside the container after deployment).
+* `docs/` - Detailed debugging methodology.
 
-## Choix d'architecture : Sway, pas Weston
+## Architecture choice: Sway, not Weston
 
-Le compositeur Wayland utilisé est **Sway** (basé sur wlroots), en mode
-headless (`WLR_BACKENDS=headless`, sans périphériques `libinput`). Ce n'est
-pas un choix arbitraire : `wayvnc` dépend de protocoles spécifiques à
-wlroots (`zwlr_virtual_pointer_manager_v1` pour le clavier/souris distants,
-une révision de `xdg-output` que Weston n'implémente pas) — avec Weston,
-`wayvnc` échoue systématiquement au démarrage
-(`Failed to initialise wayland` / `invalid version for global
-zxdg_output_manager_v1`). C'est la combinaison officiellement documentée par
-le projet wayvnc et par l'ArchWiki pour un usage headless.
+The Wayland compositor used is **Sway** (wlroots-based), in headless mode
+(`WLR_BACKENDS=headless`, no `libinput` devices). This isn't arbitrary:
+`wayvnc` depends on wlroots-specific protocols
+(`zwlr_virtual_pointer_manager_v1` for remote keyboard/mouse, an
+`xdg-output` revision Weston doesn't implement) - with Weston, `wayvnc`
+consistently fails to start (`Failed to initialise wayland` / `invalid
+version for global zxdg_output_manager_v1`). This is the combination
+officially documented by the wayvnc project and the ArchWiki for headless
+use.
 
-## Limitations connues
+## Known limitations
 
-* **Play Integrity / SafetyNet** : certaines applications (souvent
-  bancaires, DRM, anti-triche) refusent de démarrer avec un message du
-  type *"For security reasons, app will close as it does not support
-  devices with modified system"*. C'est un comportement **volontaire** de
-  l'application, pas un bug de ce déploiement : Waydroid n'est pas un
-  appareil Android certifié par Google (pas de bootloader verrouillé, pas
-  d'attestation matérielle). `4-waydroid-tools/spoof-device.sh` (usurpation
-  des propriétés système) peut suffire pour les applications qui ne
-  vérifient que l'intégrité "basique", mais **aucun contournement fiable
-  n'existe** pour les applications exigeant l'intégrité "STRONG"
-  (attestation matérielle réelle) — c'est une limitation fondamentale, pas
-  une question de configuration.
+* **Play Integrity / SafetyNet**: some apps (often banking, DRM,
+  anti-cheat) refuse to start with a message like *"For security reasons,
+  app will close as it does not support devices with modified system"*.
+  This is **intentional** app behavior, not a bug in this deployment:
+  Waydroid isn't a Google-certified Android device (no locked bootloader,
+  no hardware attestation). `4-waydroid-tools/spoof-device.sh` (spoofing
+  system properties) may be enough for apps that only check "basic"
+  integrity, but **no reliable workaround exists** for apps requiring
+  "STRONG" integrity (real hardware attestation) - that's a fundamental
+  limitation, not a configuration issue.
 
-## Sécurité
+## Security
 
-Ce projet fait des compromis de sécurité **volontaires et documentés**,
-nécessaires pour faire fonctionner Waydroid (accès au device binder) dans
-un LXC sans recompiler de module noyau :
+This project makes **deliberate, documented** security trade-offs, needed
+to make Waydroid's binder device access work inside an LXC without
+rebuilding a kernel module:
 
-* **Conteneur privilégié + `apparmor unconfined` + `cgroup2.devices.allow: a`
-  + `cap.drop` vide** (`1-proxmox-host/lxc-config-append.txt`) : le
-  conteneur dispose d'un accès matériel et de capacités bien plus large
-  qu'un LXC standard, ce qui réduit l'isolation vis-à-vis de l'hôte Proxmox.
-  Ne déployez ce conteneur que sur un hôte/LAN de confiance.
-* **noVNC/wayvnc sans authentification par défaut** : par choix de
-  conception, ce dépôt les fait écouter sur `127.0.0.1` uniquement et
-  recommande un tunnel SSH. Le flag `--expose-lan` / `EXPOSE_LAN=yes`
-  lève cette restriction mais **n'ajoute aucune authentification** — à
-  n'utiliser que sur un réseau local de confiance.
-* **Outils tiers non signés** (`4-waydroid-tools/03-setup-tools.sh`) :
-  `spoof-device.sh` et `fake_gps.py` sont téléchargés depuis des dépôts
-  GitHub individuels (`main` par défaut). Définissez `SPOOF_REF`/`GPS_REF`
-  pour figer un commit précis, et relisez leur contenu avant exécution si
-  votre modèle de menace l'exige.
-* **`curl | bash`** pour l'installeur officiel Waydroid
-  (`repo.waydro.id`, dans `01-install-waydroid.sh`) : pratique standard de
-  l'écosystème Waydroid, mais reste un risque de chaîne d'approvisionnement
-  à connaître.
+* **Privileged container + `apparmor unconfined` + `cgroup2.devices.allow: a`
+  + empty `cap.drop`** (`1-proxmox-host/lxc-config-append.txt`): the
+  container gets much broader hardware access and capabilities than a
+  standard LXC, weakening isolation from the Proxmox host. Only deploy this
+  container on a trusted host/LAN.
+* **noVNC/wayvnc unauthenticated by default**: by design, this repo binds
+  them to `127.0.0.1` and recommends an SSH tunnel. The `--expose-lan` /
+  `EXPOSE_LAN=yes` flag lifts that restriction but **adds no
+  authentication** - only use it on a trusted local network.
+* **Unsigned third-party tools** (`4-waydroid-tools/03-setup-tools.sh`):
+  `spoof-device.sh` and `fake_gps.py` are downloaded from individual GitHub
+  repos (`main` by default). Set `SPOOF_REF`/`GPS_REF` to pin a specific
+  commit, and review their content first if your threat model requires it.
+* **`curl | bash`** for the official Waydroid installer (`repo.waydro.id`,
+  in `01-install-waydroid.sh`): standard practice in the Waydroid ecosystem,
+  but still a supply-chain risk worth knowing about.
 
-Voir `docs/DEBUGGING_AND_TESTS.md` pour la méthodologie de debug complète,
-et `tests/` pour la validation automatisée.
+See `docs/DEBUGGING_AND_TESTS.md` for the full debugging methodology, and
+`tests/` for automated validation.

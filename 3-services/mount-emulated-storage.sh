@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Force le montage du volume "emulated;0" (stockage interne Android) après
-# le démarrage de la session.
+# Forces the "emulated;0" volume (Android internal storage) to mount after
+# the session starts.
 #
-# Constat (validé en conditions réelles) : sur l'image Waydroid GAPPS
-# utilisée par ce dépôt, 'vold' marque ce volume UNMOUNTABLE au boot et ne
-# retente JAMAIS de lui-même, quel que soit l'état de /dev/fuse. Un appel
-# explicite via 'sm mount' (l'outil StorageManager moderne — à la
-# différence de 'vdc', dont les commandes texte brutes ne sont plus
-# supportées sur les versions récentes d'Android) suffit à le faire passer
-# à l'état MOUNTED. Sans ce script : le Play Store et d'autres applications
-# affichent à tort "Not enough storage space" alors que /data a
-# effectivement de la place (visible via 'waydroid shell -- dumpsys mount'
-# : state=UNMOUNTABLE, et 'waydroid shell -- dumpsys diskstats' qui montre
-# pourtant de l'espace libre).
+# Observed in practice: on the GAPPS Waydroid image used by this repo, vold
+# marks this volume UNMOUNTABLE at boot and never retries on its own,
+# regardless of /dev/fuse's state. An explicit 'sm mount' call (the modern
+# StorageManager tool - unlike 'vdc', whose raw text commands are no longer
+# supported on recent Android versions) is enough to bring it to MOUNTED.
+# Without this script, the Play Store and other apps wrongly report "Not
+# enough storage space" even though /data has free space (visible via
+# 'waydroid shell -- dumpsys mount': state=UNMOUNTABLE, while 'waydroid
+# shell -- dumpsys diskstats' shows plenty of free space).
 set -uo pipefail
 
 for _ in $(seq 1 30); do
@@ -22,5 +20,5 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-echo "Avertissement: impossible de monter le volume emulated;0 après plusieurs tentatives (le service Android est-il bien démarré ?)." >&2
+echo "Warning: could not mount the emulated;0 volume after several attempts (is the Android service actually running?)." >&2
 exit 0

@@ -3,19 +3,19 @@ Description=Sway (headless, wlroots) Compositor
 After=network.target
 
 [Service]
-# On utilise un répertoire runtime DÉDIÉ, pas /run/user/0 : ce dernier est
-# géré par systemd-logind (user-runtime-dir@0.service), qui le REMONTE en
-# tmpfs neuf à chaque (dé/re)connexion de session pour root (ex: SSH),
-# effaçant au passage tout ce que Sway y aurait déjà créé (son socket
-# Wayland inclus). /run/waydroid-wayland n'est sous le contrôle que de ce
-# service — jamais recyclé par logind.
+# Uses a DEDICATED runtime directory, not /run/user/0: the latter is managed
+# by systemd-logind (user-runtime-dir@0.service), which REMOUNTS it as a
+# fresh tmpfs on every root session (de/re)connection (e.g. SSH), wiping out
+# anything Sway had created there - including its Wayland socket.
+# /run/waydroid-wayland is only ever touched by this service - never
+# recycled by logind.
 Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
 Environment="WAYLAND_DISPLAY=wayland-1"
 Environment="HOME=/root"
-# Backend headless + pas de périphériques libinput : pattern standard pour
-# faire tourner un compositeur wlroots sans écran/clavier/souris physiques
-# (cf. wayvnc FAQ / ArchWiki "Sway"). wayvnc fournit les entrées via les
-# protocoles wlroots virtual-pointer/virtual-keyboard.
+# Headless backend + no libinput devices: the standard pattern for running a
+# wlroots compositor without a physical screen/keyboard/mouse (see the
+# wayvnc FAQ / ArchWiki "Sway"). wayvnc provides input via the wlroots
+# virtual-pointer/virtual-keyboard protocols.
 Environment="WLR_BACKENDS=headless"
 Environment="WLR_LIBINPUT_NO_DEVICES=1"
 ExecStartPre=/bin/mkdir -p /run/waydroid-wayland

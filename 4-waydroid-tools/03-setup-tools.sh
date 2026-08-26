@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Runs INSIDE the Debian 13 LXC.
 #
-# NOTE SÉCURITÉ (supply-chain) : ce script télécharge et rend exécutables
-# deux scripts tiers non maintenus par ce dépôt. Ils sont largement utilisés
-# par la communauté Waydroid, mais provenant de dépôts GitHub individuels
-# (pas d'organisation, pas de signature). Pour figer une version précise
-# plutôt que de suivre 'main' en continu, définissez SPOOF_REF / GPS_REF
-# (commit SHA ou tag) avant d'exécuter ce script. Vérifiez le contenu des
-# scripts avant toute exécution si vous ne faites pas confiance à la chaîne
-# d'approvisionnement par défaut.
+# SUPPLY-CHAIN NOTE: this script downloads and makes executable two
+# third-party scripts not maintained by this repo. They're widely used in
+# the Waydroid community, but come from individual GitHub repos (no
+# organization, no signature). To pin an exact version instead of tracking
+# 'main', set SPOOF_REF / GPS_REF (a commit SHA or tag) before running this
+# script. Review the scripts' content first if you don't trust the default
+# supply chain.
 set -euo pipefail
 
 SPOOF_REPO="Quackdoc/waydroid-scripts"

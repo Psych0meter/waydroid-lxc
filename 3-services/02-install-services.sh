@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Runs INSIDE the Debian 13 LXC.
 #
-# Par défaut, wayvnc/websockify n'écoutent que sur 127.0.0.1 (accès via
-# tunnel SSH uniquement — voir README section "Sécurité"). Pour exposer
-# directement sur le réseau local (sans authentification côté VNC !):
+# By default, wayvnc/websockify only listen on 127.0.0.1 (access via SSH
+# tunnel only - see README "Security" section). To expose them directly on
+# the LAN (without any VNC-side authentication!):
 #   EXPOSE_LAN=yes ./02-install-services.sh
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
-  echo "Ce script doit être exécuté en root dans le conteneur." >&2
+  echo "This script must be run as root inside the container." >&2
   exit 1
 fi
 
@@ -26,11 +26,11 @@ install -m 0755 "${SCRIPT_DIR}/wait-for-wayland-socket.sh" /usr/local/bin/wait-f
 install -m 0755 "${SCRIPT_DIR}/ensure-waydroid-dbus.sh" /usr/local/bin/ensure-waydroid-dbus.sh
 install -m 0755 "${SCRIPT_DIR}/mount-emulated-storage.sh" /usr/local/bin/mount-emulated-storage.sh
 
-# wayvnc essaie TOUJOURS de charger un fichier de config, même sans -C, et
-# plante ("Failed to load config. Success") si aucun n'existe — bug connu
-# (https://github.com/any1/wayvnc/issues/10). On lui en fournit un vide,
-# référencé explicitement via -C dans wayvnc.service pour ne pas dépendre
-# de $HOME (non défini par systemd pour un service root sans User=).
+# wayvnc ALWAYS tries to load a config file, even without -C, and crashes
+# ("Failed to load config. Success") if none exists - known upstream bug
+# (https://github.com/any1/wayvnc/issues/10). Provide an empty one,
+# referenced explicitly via -C in wayvnc.service so it doesn't depend on
+# $HOME (unset by systemd for a root service without User=).
 mkdir -p /etc/wayvnc
 touch /etc/wayvnc/config
 
@@ -41,10 +41,10 @@ cp "${SCRIPT_DIR}/novnc.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/waydroid-session.service" /etc/systemd/system/
 
 if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  echo "!!! EXPOSE_LAN=yes : noVNC va écouter sur 0.0.0.0 SANS AUTHENTIFICATION."
-  # Seul websockify (noVNC) a besoin d'écouter sur le LAN : il se connecte à
-  # wayvnc en interne via 127.0.0.1, qui lui reste toujours en local — pas
-  # besoin d'exposer le protocole VNC brut (port 5900) en plus du web (6080).
+  echo "!!! EXPOSE_LAN=yes: noVNC will listen on 0.0.0.0 WITHOUT AUTHENTICATION."
+  # Only websockify (noVNC) needs to listen on the LAN: it connects to
+  # wayvnc internally over 127.0.0.1, which stays local - no need to expose
+  # the raw VNC protocol (port 5900) in addition to the web port (6080).
   sed -i 's/127\.0\.0\.1:6080 127\.0\.0\.1:5900/0.0.0.0:6080 127.0.0.1:5900/' /etc/systemd/system/novnc.service
 fi
 
@@ -55,21 +55,21 @@ systemctl enable --now sway
 systemctl enable --now wayvnc
 systemctl enable --now novnc
 
-# waydroid-container.service est créé/activé par le paquet 'waydroid' lui-même
-# lors de 01-install-waydroid.sh ; on s'assure qu'il est bien démarré.
+# waydroid-container.service is created/enabled by the 'waydroid' package
+# itself in 01-install-waydroid.sh; make sure it's running.
 systemctl enable --now waydroid-container.service
 
-# waydroid-session.service n'est pas démarré ici : la première initialisation
-# d'Android peut prendre plusieurs minutes et il vaut mieux la déclencher
-# explicitement une fois le reste vérifié (voir docs/DEBUGGING_AND_TESTS.md).
+# waydroid-session.service is not started here: Android's first boot can
+# take several minutes, and it's better to trigger it explicitly once
+# everything else is confirmed working (see docs/DEBUGGING_AND_TESTS.md).
 systemctl enable waydroid-session.service
 
-echo "Services installés."
+echo "Services installed."
 if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  echo "noVNC accessible sur http://<LXC_IP>:6080/vnc.html (SANS mot de passe)"
+  echo "noVNC reachable at http://<LXC_IP>:6080/vnc.html (NO password)"
 else
-  echo "noVNC accessible en local uniquement. Depuis votre poste:"
+  echo "noVNC only reachable locally. From your machine:"
   echo "  ssh -L 6080:127.0.0.1:6080 root@<LXC_IP>"
-  echo "  puis ouvrez http://127.0.0.1:6080/vnc.html"
+  echo "  then open http://127.0.0.1:6080/vnc.html"
 fi
-echo "Démarrez Waydroid avec: systemctl start waydroid-session"
+echo "Start Waydroid with: systemctl start waydroid-session"
