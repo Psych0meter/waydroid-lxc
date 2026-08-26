@@ -126,10 +126,12 @@ rebuilding a kernel module:
   them to `127.0.0.1` and recommends an SSH tunnel. The `--expose-lan` /
   `EXPOSE_LAN=yes` flag lifts that restriction but **adds no
   authentication** - only use it on a trusted local network.
-* **Unsigned third-party tools** (`4-waydroid-tools/03-setup-tools.sh`):
-  `spoof-device.sh` and `fake_gps.py` are downloaded from individual GitHub
-  repos (`main` by default). Set `SPOOF_REF`/`GPS_REF` to pin a specific
-  commit, and review their content first if your threat model requires it.
+* **Unsigned third-party tool** (`4-waydroid-tools/03-setup-tools.sh`):
+  `spoof-device.sh` is downloaded from an individual GitHub repo (`main`
+  by default). Set `SPOOF_REF` to pin a specific commit, and review its
+  content first if your threat model requires it. GPS spoofing
+  (`change-location.sh`) uses Waydroid's own `persist.waydroid.fake_gps`
+  property directly and needs no download.
 * **`curl | bash`** for the official Waydroid installer (`repo.waydro.id`,
   in `01-install-waydroid.sh`): standard practice in the Waydroid ecosystem,
   but still a supply-chain risk worth knowing about.

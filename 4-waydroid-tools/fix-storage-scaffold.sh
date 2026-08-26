@@ -9,6 +9,12 @@
 # for a specific path.
 set -euo pipefail
 
+# waydroid-session.service runs its own isolated D-Bus session bus. An
+# interactive shell doesn't have it by default, and 'waydroid shell' then
+# wrongly reports the session as stopped (see docs/DEBUGGING_AND_TESTS.md,
+# Phase 3).
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}"
+
 if ! command -v waydroid >/dev/null 2>&1; then
   echo "Error: 'waydroid' command not found." >&2
   exit 1

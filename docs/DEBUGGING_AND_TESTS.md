@@ -237,17 +237,36 @@ Store download paths ("Can't create file" errors in logcat rather than
   local copy of `spoof-device.sh` to drop the `sudo ` prefix.
 
 ## Phase 5: Test Fake GPS Injection
+
+`change-location.sh` sets Waydroid's own `persist.waydroid.fake_gps`
+property directly (`waydroid prop set persist.waydroid.fake_gps
+"Fix,gps,<lat>,<lng>,<alt>,..."`) - no third-party script or download
+involved. An earlier version of this repo tried to fetch a `fake_gps.py`
+from `ayasa520/waydroid_stuff`; that file doesn't exist at that path in
+the upstream repo, so it's been dropped in favor of this confirmed-working,
+built-in mechanism.
+
 1. Inside the Android web UI, open an app that requires location (like a
-   map app or browser).
+   map app or browser), and make sure Location is turned on in Android
+   Settings.
 2. From the LXC terminal, navigate to `4-waydroid-tools/`.
 3. Run the wrapper script with coordinates:
    `./change-location.sh 48.8584 2.2945` (Coordinates for the Eiffel Tower).
-4. Verify the location pin updates in real-time in the Android UI.
-* **Known issue**: `03-setup-tools.sh` fails to download `fake_gps.py` -
-  the default `GPS_REPO` (`ayasa520/waydroid_stuff`) has no such file on
-  `main`. GPS injection needs a working `GPS_REPO`/`GPS_REF` pointing at a
-  source that actually hosts the script; until then, this phase can't be
-  tested.
+4. Verify the location pin updates in real-time in the Android UI - this
+   takes effect immediately, no restart needed.
+
+* **Known issue** `WayDroid session is stopped` (or `waydroid prop`
+  silently doing nothing) from a plain root shell, even though
+  `waydroid-session.service` is `active (running)`: this service runs its
+  own isolated D-Bus session bus at `unix:path=/run/waydroid-dbus/session`
+  (see `waydroid-session.service` and Phase 3 above) rather than a default
+  session bus, and an interactive shell has no `DBUS_SESSION_BUS_ADDRESS`
+  pointing at it - so the `waydroid` CLI can't reach the running session
+  and misreports it as stopped. `change-location.sh` and
+  `fix-storage-scaffold.sh` export it themselves; for any other manual
+  `waydroid` command, either export it once per shell
+  (`export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/waydroid-dbus/session`)
+  or prefix the one-off command with it.
 
 ## Phase 6: Redeploying / re-running
 

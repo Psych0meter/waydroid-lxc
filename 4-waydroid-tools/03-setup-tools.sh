@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 # Runs INSIDE the Debian 13 LXC.
 #
-# Downloads two unsigned third-party scripts from individual GitHub repos.
-# Set SPOOF_REF / GPS_REF to pin a commit instead of tracking 'main'; review
-# their content first if your threat model requires it.
-#
-# KNOWN ISSUE (verified 2026-08-26): the default GPS_REPO has no
-# fake_gps.py at this path/ref - the download below will fail until
-# GPS_REPO/GPS_REF point at a source that actually has the file. Device
-# spoofing (SPOOF_REPO) is unaffected and works as-is.
+# Downloads one unsigned third-party script (device spoofing) from an
+# individual GitHub repo. Set SPOOF_REF to pin a commit instead of
+# tracking 'main'; review its content first if your threat model requires
+# it. GPS spoofing needs no download - see change-location.sh, which uses
+# Waydroid's own persist.waydroid.fake_gps property directly.
 set -euo pipefail
 
 SPOOF_REPO="Quackdoc/waydroid-scripts"
 SPOOF_REF="${SPOOF_REF:-main}"
-GPS_REPO="ayasa520/waydroid_stuff"
-GPS_REF="${GPS_REF:-main}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
@@ -35,7 +30,4 @@ fetch() {
 echo "Downloading Quackdoc's spoof-device.sh (ref: ${SPOOF_REF})..."
 fetch "https://raw.githubusercontent.com/${SPOOF_REPO}/${SPOOF_REF}/spoof-device.sh" spoof-device.sh
 
-echo "Downloading ayasa520's fake_gps.py (ref: ${GPS_REF})..."
-fetch "https://raw.githubusercontent.com/${GPS_REPO}/${GPS_REF}/fake_gps.py" fake_gps.py
-
-echo "Tools downloaded and ready!"
+echo "Tool downloaded and ready!"
