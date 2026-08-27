@@ -8,8 +8,13 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ! -e /dev/binder ]]; then
-  echo "Error: /dev/binder is missing." >&2
+# /dev/binder itself only appears once waydroid-container.service mounts
+# binderfs, i.e. after this script installs the waydroid package - it
+# can't be checked here. What CAN be checked this early is the "binder"
+# filesystem type, which shows up in every container as soon as
+# binder_linux is loaded on the host (containers share the host kernel).
+if ! grep -qw binder /proc/filesystems; then
+  echo "Error: the 'binder' filesystem type is not available." >&2
   echo "Check that enable-binder.sh ran on the host, lxc-config-append.txt" >&2
   echo "was applied, and the container was restarted." >&2
   exit 1
