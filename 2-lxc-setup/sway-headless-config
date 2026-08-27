@@ -1,9 +1,11 @@
 # Headless Sway config: a wlroots compositor for wayvnc + Waydroid only -
 # no terminal, no bar, no default keybindings (they'd intercept input meant
 # for the Android UI relayed through wayvnc).
-output * resolution 720x1280   # matches the usual Android portrait size
+# Resolution matches the usual Android portrait size.
+output * resolution 720x1280
 
-xwayland disable   # Waydroid talks Wayland directly, doesn't need it
+# Waydroid talks Wayland directly, doesn't need Xwayland.
+xwayland disable
 
 bar {
     mode invisible
