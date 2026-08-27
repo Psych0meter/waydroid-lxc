@@ -147,17 +147,20 @@ only one port needs to be reachable or tunneled for everything:
 * `/` (and everything else not matched below) proxies to gunicorn, which
   now binds `127.0.0.1:${WEBAPP_INTERNAL_PORT}` (default `8089`) instead
   of being reachable directly.
-* `/vnc/` proxies to websockify's static file server (`vnc.html`, its
-  `app/`/`core/`/`vendor/` assets), with the `/vnc/` prefix stripped so
-  the files resolve exactly as noVNC expects.
-* `/websockify` proxies noVNC's websocket connection, as its own
-  top-level location - **not** nested under `/vnc/`. This isn't
-  arbitrary: the installed noVNC package (`app/ui.js`) hardcodes its
-  websocket path setting to the literal string `websockify` and builds
-  the connection URL as `ws(s)://<page's own host:port>/websockify` -
-  root-absolute, regardless of what subpath `vnc.html` was itself loaded
-  from. Nesting it under `/vnc/websockify` would silently break the
-  connection, since the browser never asks for that path.
+* `/vnc/websockify` proxies noVNC's websocket connection, with the
+  Upgrade/Connection headers nginx needs to actually perform a websocket
+  upgrade rather than forward it as a plain GET. Confirmed against a
+  real browser session (not just source reading): when `vnc.html` is
+  loaded from `/vnc/vnc.html`, its own JS requests the websocket at
+  `/vnc/websockify` - relative to the page's own directory, not
+  root-absolute. This location has to sit at exactly that nested path
+  (nginx picks the longest matching literal prefix, so this wins over
+  the plain `/vnc/` location below for this one path only) - a
+  top-level `/websockify` location is never actually requested and
+  won't be hit.
+* `/vnc/` (everything else under it - `vnc.html`, `app/`/`core/`/`vendor/`
+  assets) proxies to websockify's static file server, with the `/vnc/`
+  prefix stripped so the files resolve exactly as noVNC expects.
 
 This also moves `novnc.service` to bind `127.0.0.1:6080`/`5900`
 permanently - `install-webapp.sh` rewrites its `ExecStart=` on every run
