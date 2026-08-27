@@ -25,7 +25,9 @@ This script:
    container before Waydroid's first boot, so About Phone already shows
    Pixel 5 the first time you open it. Pass `--skip-spoof` to leave
    `spoof-device.sh` downloaded but unapplied.
-5. Enables `waydroid-session.service` (auto-start on boot).
+5. Enables `waydroid-session.service` (auto-start on boot) and, once the
+   session is up, installs and configures the GPS mock-location app
+   automatically (pass `--skip-gps-setup` to leave it for later).
 
 By default, **noVNC is only reachable via an SSH tunnel** (see "Security"
 below). To expose it directly on the LAN (without a password):
@@ -58,8 +60,11 @@ the targeted commands).
    step if you'd rather leave it stock, or review `spoof-device.sh` first):
    `4-waydroid-tools/apply-spoof.sh`
 8. `systemctl start waydroid-session`
-9. Access: see the message printed at the end of installation, or the
-   "Accessing the interface" section below.
+9. Optional, to enable GPS mock locations (needs the session running,
+   unlike the spoof step above): `4-waydroid-tools/setup-gps.sh`, then
+   `4-waydroid-tools/change-location.sh <lat> <lng>`.
+10. Access: see the message printed at the end of installation, or the
+    "Accessing the interface" section below.
 
 ## Accessing the interface
 
@@ -153,9 +158,19 @@ rebuilding a kernel module:
   Either way, apply/re-apply it via `4-waydroid-tools/apply-spoof.sh`
   rather than running `spoof-device.sh` directly - the wrapper snapshots
   the pre-spoof configuration and makes re-applying it idempotent, and can
-  roll the change back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4). GPS
-  spoofing (`change-location.sh`) uses Waydroid's own
-  `persist.waydroid.fake_gps` property directly and needs no download.
+  roll the change back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4).
+* **Signed third-party app, installed automatically** (GPS mock location):
+  `4-waydroid-tools/setup-gps.sh` installs the official, open-source
+  Appium **Settings** app (`io.appium.settings`, a signed release from the
+  Appium project - the same mock-location provider used across the
+  Appium/UiAutomator2 mobile-testing ecosystem) as the system's
+  mock-location provider, then `change-location.sh` drives it over
+  `waydroid adb`. `0-deploy-all.sh` runs this automatically once the
+  session is up; pass `--skip-gps-setup` to leave it for later. This
+  replaces an earlier, non-functional approach that set Waydroid's own
+  `persist.waydroid.fake_gps` property directly - that property isn't
+  consumed by anything in this Android image (see
+  `docs/DEBUGGING_AND_TESTS.md`, Phase 5, for how this was confirmed).
 * **`curl | bash`** for the official Waydroid installer (`repo.waydro.id`,
   in `01-install-waydroid.sh`): standard practice in the Waydroid ecosystem,
   but still a supply-chain risk worth knowing about.

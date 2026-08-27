@@ -284,33 +284,64 @@ genuinely clean slate in that case, re-run `waydroid init -f` instead.
     `waydroid_base.prop` correctly, but nothing re-reads that file until
     the container itself remounts the rootfs.
 
-## Phase 5: Test Fake GPS Injection
+## Phase 5: Test GPS Mock Location
 
-`change-location.sh` sets Waydroid's own `persist.waydroid.fake_gps`
-property directly (`waydroid prop set persist.waydroid.fake_gps
-"Fix,gps,<lat>,<lng>,<alt>,..."`) - no third-party script or download
-involved. An earlier version of this repo tried to fetch a `fake_gps.py`
-from `ayasa520/waydroid_stuff`; that file doesn't exist at that path in
-the upstream repo, so it's been dropped in favor of this confirmed-working,
-built-in mechanism.
+`0-deploy-all.sh` installs and configures this automatically by default
+(once the session is up - pass `--skip-gps-setup` to opt out). This phase
+is for verifying it took effect, or for setting it up by hand afterwards.
 
-1. Inside the Android web UI, open an app that requires location (like a
-   map app or browser), and make sure Location is turned on in Android
-   Settings.
-2. From the LXC terminal, navigate to `4-waydroid-tools/`.
-3. Run the wrapper script with coordinates:
-   `./change-location.sh 48.8584 2.2945` (Coordinates for the Eiffel Tower).
-4. Verify the location pin updates in real-time in the Android UI - this
-   takes effect immediately, no restart needed.
+`change-location.sh` drives the official Appium **Settings** app
+(`io.appium.settings`, downloaded by `03-setup-tools.sh`) as a real,
+standards-compliant Android mock-location provider, over `waydroid adb`.
+This is the same mechanism the entire Appium/UiAutomator2 mobile-testing
+ecosystem uses to set GPS locations on real and virtual Android devices.
 
-* **Known issue** `WayDroid session is stopped` (or `waydroid prop`
+**This replaces an earlier, broken approach.** A previous version of this
+repo set Waydroid's own `persist.waydroid.fake_gps` property directly
+(`waydroid prop set persist.waydroid.fake_gps "Fix,gps,<lat>,<lng>,..."`)
+without a download. The command always succeeded and even round-tripped
+correctly through `waydroid prop get` - but it never actually affected
+Android: a live `waydroid logcat` capture taken at the exact moment the
+property was set showed **zero** GNSS/location-provider log activity, and
+that property doesn't appear anywhere in Waydroid's own source
+(`waydroid/waydroid` on GitHub) or in any independent documentation. Best
+explanation: nothing in this Android image ever reads that property, so
+every "fix" silently went nowhere - which is exactly why the device
+reported "unknown"/no GPS despite the script reporting success every time.
+The Appium Settings app is the corrected, independently-verifiable
+replacement.
+
+1. First-time setup (done automatically by `0-deploy-all.sh` unless
+   `--skip-gps-setup` was passed): from `4-waydroid-tools/`, run
+   `./setup-gps.sh`. This enables ADB debugging inside the Android
+   container (`settings put global adb_enabled 1` - off by default on this
+   build), waits for `waydroid adb` to see a device, installs the Appium
+   Settings APK, and grants it location permissions plus the
+   `android:mock_location` app-op. Safe to re-run.
+2. Inside the Android web UI, open an app that requires location (a map
+   app or browser), and make sure Location is turned on in Android
+   Settings (Settings > Location > mode "High accuracy" or "Device only").
+3. From `4-waydroid-tools/`, run: `./change-location.sh 48.8584 2.2945`
+   (coordinates for the Eiffel Tower). The app resends the fix roughly
+   every 2 seconds until stopped.
+4. Verify the location pin updates in the Android UI.
+5. `./change-location.sh --stop` stops sending mock fixes.
+
+* **Known issue**: `setup-gps.sh` times out after 3 minutes with
+  `'waydroid adb devices' never showed a connected device`. Android's
+  first boot can genuinely take that long on a CPU-constrained host
+  (software rendering is heavy - see Phase 3), so first try again once
+  `waydroid status` reports `Session: RUNNING`. If it still doesn't
+  connect, check `waydroid adb devices` by hand and confirm
+  `waydroid shell -- settings get global adb_enabled` returns `1`.
+* **Known issue** `WayDroid session is stopped` (or `waydroid shell`
   silently doing nothing) from a plain root shell, even though
   `waydroid-session.service` is `active (running)`: this service runs its
   own isolated D-Bus session bus at `unix:path=/run/waydroid-dbus/session`
   (see `waydroid-session.service` and Phase 3 above) rather than a default
   session bus, and an interactive shell has no `DBUS_SESSION_BUS_ADDRESS`
   pointing at it - so the `waydroid` CLI can't reach the running session
-  and misreports it as stopped. `change-location.sh` and
+  and misreports it as stopped. `setup-gps.sh`, `change-location.sh` and
   `fix-storage-scaffold.sh` export it themselves; for any other manual
   `waydroid` command, either export it once per shell
   (`export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/waydroid-dbus/session`)

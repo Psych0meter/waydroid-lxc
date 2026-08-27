@@ -7,7 +7,9 @@
 # restarts the container, then runs the install scripts inside it in order
 # (2-lxc-setup -> 3-services -> 4-waydroid-tools), applying the Pixel 5
 # device spoof and restarting the container before Waydroid's first boot
-# (pass --skip-spoof to leave it downloaded but unapplied).
+# (pass --skip-spoof to leave it downloaded but unapplied), then - once
+# the session is up - installing and configuring the GPS mock-location
+# app (pass --skip-gps-setup to leave it downloaded but unconfigured).
 #
 # ct/debian.sh from community-scripts is normally interactive (whiptail);
 # this wrapper pre-fills its var_* environment variables to force
@@ -41,6 +43,10 @@ EXPOSE_LAN=""
 # unapplied (e.g. if your threat model requires reviewing it first; see
 # the "Security" section of the README).
 SPOOF_DEVICE="yes"
+# Installs and configures the GPS mock-location app automatically once the
+# session is up - pass --skip-gps-setup to leave it installed manually
+# later via 4-waydroid-tools/setup-gps.sh.
+SETUP_GPS="yes"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,8 +59,9 @@ while [[ $# -gt 0 ]]; do
     --expose-lan) EXPOSE_LAN="yes"; shift 1 ;;
     --no-expose-lan) EXPOSE_LAN="no"; shift 1 ;;
     --skip-spoof) SPOOF_DEVICE="no"; shift 1 ;;
+    --skip-gps-setup) SETUP_GPS="no"; shift 1 ;;
     -h|--help)
-      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan|--no-expose-lan] [--skip-spoof]"
+      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan|--no-expose-lan] [--skip-spoof] [--skip-gps-setup]"
       echo ""
       echo "  --expose-lan     Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
       echo "  --no-expose-lan  Force tunnel-only access (SSH tunnel, see README), even on a re-run"
@@ -66,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       echo "                   it - by default this script applies it automatically, before the"
       echo "                   Waydroid session's first boot, so About Phone shows Pixel 5 right"
       echo "                   away. Use 4-waydroid-tools/apply-spoof.sh manually afterwards."
+      echo ""
+      echo "  --skip-gps-setup Download the GPS mock-location app but don't install/configure it -"
+      echo "                   by default this script does so automatically once the session is up."
+      echo "                   Use 4-waydroid-tools/setup-gps.sh manually afterwards."
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;
@@ -206,6 +217,17 @@ fi
 echo "==> [5/5] Starting the Waydroid session"
 pct exec "${CTID}" -- systemctl enable --now waydroid-session.service
 
+GPS_MSG="Skipped (--skip-gps-setup) - install with 4-waydroid-tools/setup-gps.sh"
+if [[ "${SETUP_GPS}" == "yes" ]]; then
+  echo "    -> Setting up the GPS mock-location app (waits for Android's first boot, up to 3 min)..."
+  if pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x setup-gps.sh && ./setup-gps.sh"; then
+    GPS_MSG="Ready - set a location with 4-waydroid-tools/change-location.sh <lat> <lng>"
+  else
+    GPS_MSG="FAILED (see the error above) - retry with: pct exec ${CTID} -- bash -c \"cd ${REMOTE_DIR}/4-waydroid-tools && ./setup-gps.sh\""
+    echo "    -> Warning: GPS setup failed - this doesn't affect the rest of the deployment." >&2
+  fi
+fi
+
 CT_IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"
 
 # Query the container's actual, resolved state rather than trusting the
@@ -236,6 +258,7 @@ cat <<EOF
    CTID           : ${CTID}
    ${ACCESS_MSG}
    Device spoofing: ${SPOOF_MSG}
+   GPS mock-location: ${GPS_MSG}
    Directory      : ${REMOTE_DIR} (inside the container)
 
  See the "Security" section of the README (privileged container,
