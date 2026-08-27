@@ -84,7 +84,14 @@ sed \
   -e "s|__VENV_DIR__|${VENV_DIR}|g" \
   "${SCRIPT_DIR}/waydroid-webapp.service" > /etc/systemd/system/waydroid-webapp.service
 systemctl daemon-reload
-systemctl enable --now waydroid-webapp
+systemctl enable waydroid-webapp
+# Unconditional restart, not 'enable --now': on a re-run against an
+# already-running service, --now alone is a no-op for units that are
+# already active, so a changed WEBAPP_EXPOSE_LAN/WEBAPP_PORT would
+# silently NOT take effect until something else restarted it - the same
+# class of bug 3-services/02-install-services.sh had for EXPOSE_LAN/
+# novnc.service (see docs/DEBUGGING_AND_TESTS.md, Phase 6).
+systemctl restart waydroid-webapp
 
 echo "Waiting for the API token to be generated..."
 TOKEN_FILE="${CONF_DIR}/api-token"
