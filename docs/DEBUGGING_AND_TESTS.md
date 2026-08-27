@@ -346,6 +346,28 @@ replacement.
 4. Verify the location pin updates in the Android UI.
 5. `./change-location.sh --stop` stops sending mock fixes.
 
+**Verified end-to-end** (live container, `dumpsys location`): the mock
+provider's `last location` updates correctly and instantly on every
+`change-location.sh` call, and Google Play Services' own
+`fused_location_provider`/`network_location_provider` listeners receive
+each fix continuously (visible as repeating `passive provider delivered
+location[...] to .../com.google.android.gms[...]` entries in the event
+log) - the mock-location pipeline itself works correctly all the way
+through Android's location stack.
+
+* **Known behavior, not a bug**: after the first fix, Google Maps doesn't
+  live-refresh its blue dot when `change-location.sh` jumps to a new,
+  distant coordinate - `dumpsys location` confirms the new fix reaches
+  Android/Play Services immediately, but Maps' own UI layer caches the
+  last position it rendered and only re-reads location on a fresh start.
+  Force-stop and relaunch Maps after each `change-location.sh` call to
+  see the new position: `adb shell am force-stop
+  com.google.android.apps.maps`, then relaunch it from the launcher (or
+  `adb shell monkey -p com.google.android.apps.maps -c
+  android.intent.category.LAUNCHER 1`). This is standard behavior for any
+  mock-location "teleport" (as opposed to gradual simulated movement),
+  not specific to this deployment.
+
 * **Known issue**: `setup-gps.sh` times out after 3 minutes with
   `'waydroid adb connect' never succeeded`. Android's first boot can
   genuinely take that long on a CPU-constrained host (software rendering
