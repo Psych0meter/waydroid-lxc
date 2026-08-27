@@ -38,6 +38,18 @@ if command -v systemd-analyze >/dev/null 2>&1; then
   for f in 3-services/*.service; do
     systemd-analyze verify "$f" 2>&1 || true
   done
+  # 5-webapp/waydroid-webapp.service is a template (__APP_DIR__/__VENV_DIR__
+  # placeholders, filled in by install-webapp.sh) - verifying it as-is
+  # would report a fatal "path is not absolute" error rather than the
+  # informational "binary not found" warnings the other units get, so
+  # render it with dummy paths first, the same way install-webapp.sh does.
+  RENDERED_WEBAPP_UNIT="$(mktemp --suffix=.service)"
+  sed \
+    -e "s|__APP_DIR__|/opt/waydroid-lxc-deploy/5-webapp|g" \
+    -e "s|__VENV_DIR__|/opt/waydroid-webapp-venv|g" \
+    5-webapp/waydroid-webapp.service > "${RENDERED_WEBAPP_UNIT}"
+  systemd-analyze verify "${RENDERED_WEBAPP_UNIT}" 2>&1 || true
+  rm -f "${RENDERED_WEBAPP_UNIT}"
   echo "(informational only: the binaries/units these reference won't exist"
   echo " outside the target container, so warnings above are expected)"
 else
@@ -46,7 +58,7 @@ fi
 
 echo ""
 echo "== Manual .service validation (key=value pairs) =="
-for f in 3-services/*.service; do
+for f in 3-services/*.service 5-webapp/*.service; do
   if ! grep -q '^\[Unit\]' "$f" || ! grep -q '^\[Service\]' "$f"; then
     echo "MISSING SECTION: $f"
     FAIL=1
@@ -66,7 +78,29 @@ if [[ ! -f "2-lxc-setup/sway-headless-config" ]]; then
   echo "MISSING FILE: 2-lxc-setup/sway-headless-config"
   FAIL=1
 fi
+for ref in requirements.txt waydroid-webapp.service app.py auth.py \
+           actions/base.py actions/gps.py actions/geocode.py \
+           routes/gps.py routes/geocode.py templates/index.html; do
+  if [[ ! -f "5-webapp/${ref}" ]]; then
+    echo "MISSING FILE referenced by install-webapp.sh/app.py: 5-webapp/${ref}"
+    FAIL=1
+  fi
+done
 echo "OK"
+
+echo ""
+echo "== Python syntax (py_compile) =="
+if command -v python3 >/dev/null 2>&1; then
+  while IFS= read -r -d '' f; do
+    if ! python3 -m py_compile "$f" 2>&1; then
+      echo "SYNTAX ERROR: $f"
+      FAIL=1
+    fi
+  done < <(find 5-webapp -name '*.py' -print0)
+  echo "OK"
+else
+  echo "python3 not available, skipping this step."
+fi
 
 echo ""
 if [[ "${FAIL}" -eq 0 ]]; then

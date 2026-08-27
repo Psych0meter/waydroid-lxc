@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waydroid Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Waydroid Control</h1>
+    <button id="api-key-btn" type="button" title="Set API key">API key</button>
+  </header>
+
+  <main>
+    <section id="map-panel">
+      <div id="map"></div>
+      <p class="hint">Click anywhere on the map to set that point, or search an address below.</p>
+    </section>
+
+    <section id="form-panel">
+      <form id="address-form">
+        <label for="address">Address</label>
+        <div class="row">
+          <input type="text" id="address" name="address" placeholder="e.g. Eiffel Tower, Paris">
+          <button type="submit">Search</button>
+        </div>
+      </form>
+
+      <form id="coords-form">
+        <label for="latitude">Latitude</label>
+        <input type="text" id="latitude" name="latitude" placeholder="48.8584" required>
+
+        <label for="longitude">Longitude</label>
+        <input type="text" id="longitude" name="longitude" placeholder="2.2945" required>
+
+        <label for="altitude">Altitude (m, optional)</label>
+        <input type="text" id="altitude" name="altitude" placeholder="35.0">
+
+        <div class="row">
+          <button type="submit" id="set-btn">Set location</button>
+          <button type="button" id="stop-btn">Stop</button>
+        </div>
+      </form>
+
+      <div id="status" role="status"></div>
+    </section>
+  </main>
+
+  <dialog id="api-key-dialog">
+    <form method="dialog">
+      <label for="api-key-input">API key</label>
+      <input type="password" id="api-key-input" autocomplete="off">
+      <p class="hint">
+        Printed by install-webapp.sh, and readable afterwards on the
+        container at /etc/waydroid-webapp/api-token. Stored only in this
+        browser's local storage.
+      </p>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button type="button" id="api-key-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

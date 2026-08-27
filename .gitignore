@@ -1,0 +1,8 @@
+# Python bytecode (e.g. from running/testing 5-webapp/ locally)
+__pycache__/
+*.pyc
+
+# Leaflet is vendored at install time (5-webapp/install-webapp.sh), not
+# committed - mirrors how 4-waydroid-tools/03-setup-tools.sh downloads
+# spoof-device.sh/mock-location.apk rather than checking them in.
+/5-webapp/static/vendor/
