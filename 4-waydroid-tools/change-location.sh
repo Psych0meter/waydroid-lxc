@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Sets (or clears) a mock GPS fix via the Appium Settings app
 # (io.appium.settings), installed and configured by setup-gps.sh. This is
-# the standard Android mock-location provider mechanism, driven over
-# 'waydroid adb'.
+# the standard Android mock-location provider mechanism, driven over a
+# real 'adb' client connected via 'waydroid adb connect' - 'waydroid adb'
+# itself only has connect/disconnect subactions, it isn't a shell/install
+# proxy the way 'waydroid adb shell'/'waydroid adb install' would imply.
 #
 # An earlier version of this repo used Waydroid's own
 # persist.waydroid.fake_gps property directly ('waydroid prop set ...').
@@ -20,8 +22,23 @@ PKG="io.appium.settings"
 # docs/DEBUGGING_AND_TESTS.md, Phase 3).
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}"
 
+if ! command -v waydroid >/dev/null 2>&1; then
+  echo "Error: 'waydroid' command not found." >&2
+  exit 1
+fi
+
+if ! command -v adb >/dev/null 2>&1; then
+  echo "Error: 'adb' command not found - run ./setup-gps.sh first." >&2
+  exit 1
+fi
+
+# The container's IP (and therefore the adb connection) can change across
+# session/container restarts - reconnecting is harmless when already
+# connected, and fixes a stale/offline entry otherwise.
+waydroid adb connect >/dev/null 2>&1 || true
+
 if [[ "$#" -eq 1 && "$1" == "--stop" ]]; then
-  waydroid adb shell am stopservice "${PKG}/.LocationService"
+  adb shell am stopservice "${PKG}/.LocationService"
   echo "Mock location service stopped."
   exit 0
 fi
@@ -48,17 +65,12 @@ for value in "${LAT}" "${LNG}" "${ALT}"; do
   fi
 done
 
-if ! command -v waydroid >/dev/null 2>&1; then
-  echo "Error: 'waydroid' command not found." >&2
-  exit 1
-fi
-
-if ! waydroid adb shell pm list packages 2>/dev/null | grep -q "^package:${PKG}$"; then
+if ! adb shell pm list packages 2>/dev/null | grep -q "^package:${PKG}$"; then
   echo "Error: ${PKG} isn't installed - run ./setup-gps.sh first." >&2
   exit 1
 fi
 
-OUTPUT="$(waydroid adb shell am start-foreground-service --user 0 -n "${PKG}/.LocationService" \
+OUTPUT="$(adb shell am start-foreground-service --user 0 -n "${PKG}/.LocationService" \
   --es longitude "${LNG}" --es latitude "${LAT}" --es altitude "${ALT}" 2>&1)" || {
   echo "Error: failed to start the mock-location service:" >&2
   echo "${OUTPUT}" >&2

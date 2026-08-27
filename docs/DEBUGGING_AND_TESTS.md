@@ -292,9 +292,28 @@ is for verifying it took effect, or for setting it up by hand afterwards.
 
 `change-location.sh` drives the official Appium **Settings** app
 (`io.appium.settings`, downloaded by `03-setup-tools.sh`) as a real,
-standards-compliant Android mock-location provider, over `waydroid adb`.
-This is the same mechanism the entire Appium/UiAutomator2 mobile-testing
-ecosystem uses to set GPS locations on real and virtual Android devices.
+standards-compliant Android mock-location provider. This is the same
+mechanism the entire Appium/UiAutomator2 mobile-testing ecosystem uses to
+set GPS locations on real and virtual Android devices.
+
+**Important: `waydroid adb` is not a general adb proxy.** Its CLI only
+implements two subactions, `connect` and `disconnect`
+(`waydroid adb devices`/`install`/`shell` don't exist -
+`waydroid adb: error: argument subaction: invalid choice: 'devices'
+(choose from connect, disconnect)`). `waydroid adb connect` itself just
+looks up the Android container's current IP from the `waydroid0` DHCP
+lease file and shells out to a real `adb connect <ip>` - so a genuine
+`adb` binary has to be installed in the LXC, and every other adb
+operation (`devices`, `install`, `shell`) is the plain `adb` client
+talking directly to that IP, not `waydroid adb`. `setup-gps.sh` and
+`change-location.sh` both install `adb` (via `apt-get install -y adb`) if
+it's missing, call `waydroid adb connect` in a retry loop first (the
+container's IP can change across restarts, and reconnecting when already
+connected is harmless), then use plain `adb` for everything else. An
+earlier version of these scripts (before this was discovered) tried
+`waydroid adb devices`/`install`/`shell` directly and failed outright -
+if you deployed that version, re-run `03-setup-tools.sh` and
+`setup-gps.sh` to pick up the fix.
 
 **This replaces an earlier, broken approach.** A previous version of this
 repo set Waydroid's own `persist.waydroid.fake_gps` property directly
@@ -313,10 +332,10 @@ replacement.
 
 1. First-time setup (done automatically by `0-deploy-all.sh` unless
    `--skip-gps-setup` was passed): from `4-waydroid-tools/`, run
-   `./setup-gps.sh`. This enables ADB debugging inside the Android
-   container (`settings put global adb_enabled 1` - off by default on this
-   build), waits for `waydroid adb` to see a device, installs the Appium
-   Settings APK, and grants it location permissions plus the
+   `./setup-gps.sh`. This installs the `adb` client if needed, waits for
+   `waydroid adb connect` to succeed (up to 3 minutes) and for `adb
+   devices` to show the device as `device` (not `offline`), installs the
+   Appium Settings APK, and grants it location permissions plus the
    `android:mock_location` app-op. Safe to re-run.
 2. Inside the Android web UI, open an app that requires location (a map
    app or browser), and make sure Location is turned on in Android
@@ -328,12 +347,27 @@ replacement.
 5. `./change-location.sh --stop` stops sending mock fixes.
 
 * **Known issue**: `setup-gps.sh` times out after 3 minutes with
-  `'waydroid adb devices' never showed a connected device`. Android's
-  first boot can genuinely take that long on a CPU-constrained host
-  (software rendering is heavy - see Phase 3), so first try again once
-  `waydroid status` reports `Session: RUNNING`. If it still doesn't
-  connect, check `waydroid adb devices` by hand and confirm
-  `waydroid shell -- settings get global adb_enabled` returns `1`.
+  `'waydroid adb connect' never succeeded`. Android's first boot can
+  genuinely take that long on a CPU-constrained host (software rendering
+  is heavy - see Phase 3), so first try again once `waydroid status`
+  reports `Session: RUNNING`. If it still doesn't connect, try `waydroid
+  adb connect` by hand and check its error output.
+* **Known issue**: `setup-gps.sh` fails with `adb connected but no device
+  is listed as ready yet`. Run `adb devices` by hand - a device listed as
+  `offline` instead of `device` usually clears up within a few seconds on
+  its own (the Android side is still finishing its handshake); re-run
+  `setup-gps.sh` once it shows `device`.
+* **Known issue (legacy)**: `java.lang.NullPointerException` in
+  `SettingsProvider.mutateGlobalSetting` from a command like `waydroid
+  shell -- settings put global adb_enabled 1`. This came from an earlier
+  version of `setup-gps.sh` that tried to flip `adb_enabled` via `waydroid
+  shell` before realizing that command isn't attributed to a proper
+  "shell" UID the way real `adb shell` is, which trips a null
+  `getCallingPackage()` deep in `AppOpsService`. The current `setup-gps.sh`
+  no longer does this at all - network ADB doesn't need to be toggled by
+  hand, since `waydroid adb connect` already sets up an authenticated
+  connection to the device. If you still see this error, you're running
+  an old copy of the script.
 * **Known issue** `WayDroid session is stopped` (or `waydroid shell`
   silently doing nothing) from a plain root shell, even though
   `waydroid-session.service` is `active (running)`: this service runs its

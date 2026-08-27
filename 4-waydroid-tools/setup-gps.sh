@@ -10,6 +10,13 @@
 # change-location.sh drives it afterwards. Safe to re-run (every step here
 # is idempotent: 'adb install -r' reinstalls cleanly, 'pm grant'/'appops
 # set' are no-ops when already granted).
+#
+# 'waydroid adb' only has two subactions, connect/disconnect - it doesn't
+# proxy devices/install/shell like a real adb. 'waydroid adb connect' just
+# looks up the container's IP (from the waydroid0 DHCP lease) and shells
+# out to a real 'adb' binary to connect to it - so a real 'adb' has to be
+# installed here, and every subsequent adb command below is the plain
+# 'adb' client, not 'waydroid adb'.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,16 +39,16 @@ if [[ ! -f "${APK}" ]]; then
   exit 1
 fi
 
-# adbd is disabled by default on this (non-eng) build. Flip it on via the
-# already-proven 'waydroid shell' path before touching 'waydroid adb' -
-# this only needs to happen once, but is harmless to repeat.
-echo "Enabling ADB debugging inside the Android container..."
-waydroid shell -- settings put global adb_enabled 1
+if ! command -v adb >/dev/null 2>&1; then
+  echo "Installing the 'adb' client (needed by 'waydroid adb connect')..."
+  apt-get update
+  apt-get install -y adb
+fi
 
-echo "Waiting for 'waydroid adb' to see a device (Android's first boot can take a few minutes)..."
+echo "Connecting adb to the Waydroid container (waits for its DHCP lease to appear, up to 3 minutes)..."
 CONNECTED=0
 for _ in $(seq 1 90); do
-  if waydroid adb devices 2>/dev/null | grep -qE '\bdevice$'; then
+  if waydroid adb connect >/dev/null 2>&1; then
     CONNECTED=1
     break
   fi
@@ -49,17 +56,23 @@ for _ in $(seq 1 90); do
 done
 
 if [[ "${CONNECTED}" -ne 1 ]]; then
-  echo "Error: 'waydroid adb devices' never showed a connected device after 3 minutes." >&2
-  echo "Check 'waydroid status' (session must be RUNNING) and 'waydroid adb devices' by hand." >&2
+  echo "Error: 'waydroid adb connect' never succeeded after 3 minutes." >&2
+  echo "Check 'waydroid status' (session must be RUNNING) and try 'waydroid adb connect' by hand." >&2
+  exit 1
+fi
+
+if ! adb devices | grep -qE '\bdevice$'; then
+  echo "Error: adb connected but no device is listed as ready yet." >&2
+  echo "Check 'adb devices' by hand." >&2
   exit 1
 fi
 
 echo "Installing the mock-location app..."
-waydroid adb install -r "${APK}"
+adb install -r "${APK}"
 
 echo "Granting location permissions and mock-location app-ops..."
-waydroid adb shell pm grant "${PKG}" android.permission.ACCESS_FINE_LOCATION
-waydroid adb shell pm grant "${PKG}" android.permission.ACCESS_COARSE_LOCATION
-waydroid adb shell appops set "${PKG}" android:mock_location allow
+adb shell pm grant "${PKG}" android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant "${PKG}" android.permission.ACCESS_COARSE_LOCATION
+adb shell appops set "${PKG}" android:mock_location allow
 
 echo "Done. Set a location with: ./change-location.sh <latitude> <longitude>"

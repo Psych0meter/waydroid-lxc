@@ -164,9 +164,12 @@ rebuilding a kernel module:
   Appium **Settings** app (`io.appium.settings`, a signed release from the
   Appium project - the same mock-location provider used across the
   Appium/UiAutomator2 mobile-testing ecosystem) as the system's
-  mock-location provider, then `change-location.sh` drives it over
-  `waydroid adb`. `0-deploy-all.sh` runs this automatically once the
-  session is up; pass `--skip-gps-setup` to leave it for later. This
+  mock-location provider, then `change-location.sh` drives it over a real
+  `adb` client connected via `waydroid adb connect` (see
+  `docs/DEBUGGING_AND_TESTS.md`, Phase 5, for why it isn't `waydroid adb
+  shell`/`install` - those don't exist). `0-deploy-all.sh` runs this
+  automatically once the session is up; pass `--skip-gps-setup` to leave
+  it for later. This
   replaces an earlier, non-functional approach that set Waydroid's own
   `persist.waydroid.fake_gps` property directly - that property isn't
   consumed by anything in this Android image (see
