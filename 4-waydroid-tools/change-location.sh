@@ -5,21 +5,14 @@
 # real 'adb' client connected via 'waydroid adb connect' - 'waydroid adb'
 # itself only has connect/disconnect subactions, it isn't a shell/install
 # proxy the way 'waydroid adb shell'/'waydroid adb install' would imply.
-#
-# An earlier version of this repo used Waydroid's own
-# persist.waydroid.fake_gps property directly ('waydroid prop set ...').
-# A live logcat capture during injection showed zero GNSS/location-provider
-# activity - nothing in this Android image actually consumes that
-# property, despite the command succeeding silently and round-tripping via
-# 'waydroid prop get'. See docs/DEBUGGING_AND_TESTS.md, Phase 5.
+# (Not Waydroid's own fake_gps property - that one doesn't work, see
+# docs/DEBUGGING_AND_TESTS.md Phase 5.)
 set -euo pipefail
 
 PKG="io.appium.settings"
 
-# waydroid-session.service runs its own isolated D-Bus session bus. An
-# interactive shell doesn't have it by default, and 'waydroid' CLI
-# commands then wrongly report the session as stopped (see
-# docs/DEBUGGING_AND_TESTS.md, Phase 3).
+# waydroid-session.service runs its own isolated D-Bus session bus; an
+# interactive shell doesn't have it by default (see docs Phase 3).
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}"
 
 if ! command -v waydroid >/dev/null 2>&1; then

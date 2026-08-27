@@ -5,19 +5,14 @@
 #   - spoof-device.sh (device identity spoofing), downloaded but NOT run
 #     here - see apply-spoof.sh (SPOOF_REF pins a commit instead of
 #     tracking 'main'; review its content first if your threat model
-#     requires it - the only change made here is stripping the 'sudo'
-#     calls it doesn't need).
+#     requires it).
 #   - the official Appium "Settings" app (io.appium.settings), a signed,
 #     open-source APK used by the entire Appium/UiAutomator2 ecosystem as
-#     a real, standards-compliant Android mock-location provider. GPS
-#     spoofing (change-location.sh) installs and drives it over
-#     'waydroid adb'. MOCK_LOCATION_VERSION pins the GitHub release tag.
-#
-# (An earlier version of this repo tried waydroid's own
-# persist.waydroid.fake_gps property directly; a live logcat capture
-# showed zero GNSS/location-provider activity when setting it - nothing
-# in this Android image actually consumes that property, despite the
-# command succeeding silently. See docs/DEBUGGING_AND_TESTS.md, Phase 5.)
+#     a real, standards-compliant Android mock-location provider (not
+#     Waydroid's own fake_gps property - that one doesn't work, see
+#     docs/DEBUGGING_AND_TESTS.md Phase 5). GPS spoofing
+#     (change-location.sh) installs and drives it over 'waydroid adb'.
+#     MOCK_LOCATION_VERSION pins the GitHub release tag.
 set -euo pipefail
 
 SPOOF_REPO="Quackdoc/waydroid-scripts"
@@ -46,12 +41,11 @@ echo "Downloading Quackdoc's spoof-device.sh (ref: ${SPOOF_REF})..."
 fetch "https://raw.githubusercontent.com/${SPOOF_REPO}/${SPOOF_REF}/spoof-device.sh" spoof-device.sh
 chmod +x spoof-device.sh
 
-# The upstream script unconditionally shells out to 'sudo', which isn't
-# installed in this minimal container. Since everything here already runs
-# as root, elevation is a no-op we can safely drop - without this, every
-# line of the script fails with "sudo: command not found" and NONE of the
-# device properties actually get written, silently (the script has no
-# 'set -e' and still exits 0).
+# The upstream script unconditionally shells out to 'sudo', not installed
+# in this minimal container; strip it since everything here already runs
+# as root. Without this, every line fails with "sudo: command not found"
+# and NONE of the device properties get written - silently, since the
+# script has no 'set -e' and still exits 0.
 sed -i 's/\bsudo //g' spoof-device.sh
 
 echo "Downloading the Appium Settings mock-location app (${MOCK_LOCATION_VERSION})..."

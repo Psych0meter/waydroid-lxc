@@ -50,7 +50,10 @@ app = create_app()
 if __name__ == "__main__":
     # Only used for local/manual runs (e.g. development) - the systemd
     # service (install-webapp.sh) runs this through gunicorn instead,
-    # which reads the same WEBAPP_HOST/WEBAPP_PORT from webapp.env.
-    host = os.environ.get("WEBAPP_HOST", "127.0.0.1")
-    port = int(os.environ.get("WEBAPP_PORT", "8088"))
+    # reading GUNICORN_HOST/GUNICORN_PORT from webapp.env directly in its
+    # ExecStart. Read the same two names here so a manual `python3 app.py`
+    # against an installed webapp.env picks up the configured bind address
+    # instead of silently defaulting to 127.0.0.1:8088.
+    host = os.environ.get("GUNICORN_HOST", "127.0.0.1")
+    port = int(os.environ.get("GUNICORN_PORT", "8088"))
     app.run(host=host, port=port)

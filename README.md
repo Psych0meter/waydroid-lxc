@@ -30,14 +30,24 @@ This script:
    so About Phone already shows Pixel 5 the first time you open it.
 5. Enables `waydroid-session.service` (auto-start on boot) and, once the
    session is up, installs and configures the GPS mock-location app
-   automatically (pass `--skip-gps-setup` to leave it for later).
+   automatically (pass `--skip-gps-setup` to leave it for later), then
+   installs the GPS control webapp (`5-webapp/` - a browser UI plus API
+   to drive `change-location.sh`, with noVNC unified behind the same
+   port; pass `--skip-webapp` to leave it for later, see
+   `5-webapp/README.md`).
 
-By default, **noVNC is only reachable via an SSH tunnel** (see "Security"
-below). To expose it directly on the LAN (without a password):
+By default, **noVNC and the webapp are each only reachable via an SSH
+tunnel** (see "Security" below). To expose noVNC directly on the LAN
+(without a password):
 
 ```bash
 ./0-deploy-all.sh --expose-lan
 ```
+
+The webapp has its own, separate switch - `--webapp-expose-lan` - since
+it sits behind an API key even when exposed (see "Accessing the
+interface" below for how the two flags interact once the webapp is
+installed).
 
 `community-scripts/ProxmoxVE` is an independent third-party project;
 `0-deploy-all.sh` downloads and runs its `ct/debian.sh` script **on every
@@ -72,10 +82,22 @@ the targeted commands).
 10. Optional, to enable GPS mock locations (needs the session running,
     unlike the two steps above): `4-waydroid-tools/setup-gps.sh`, then
     `4-waydroid-tools/change-location.sh <lat> <lng>`.
-11. Access: see the message printed at the end of installation, or the
+11. Optional, for the GPS control webapp (needs `3-services/02-install-services.sh`
+    already run - it unifies noVNC behind the webapp's own port by
+    default): `5-webapp/install-webapp.sh`. See `5-webapp/README.md`.
+12. Access: see the message printed at the end of installation, or the
     "Accessing the interface" section below.
 
 ## Accessing the interface
+
+**If the webapp is installed** (the default via `0-deploy-all.sh`, or
+manual step 11 above), it and noVNC are unified behind one port - see
+`5-webapp/README.md`'s "Unified webapp + noVNC gateway" section for how.
+The rest of this section describes noVNC's **own** exposure, which only
+matters when the webapp is skipped (`--skip-webapp`) - once it's
+installed, `--webapp-expose-lan` / `--no-webapp-expose-lan` control
+external reachability for both instead, and noVNC's own port is always
+forced back to loopback-only regardless of `--expose-lan` below.
 
 By default (without `--expose-lan` / `EXPOSE_LAN=yes`), wayvnc and noVNC
 only listen on `127.0.0.1` **inside the container**. From your machine:
@@ -104,6 +126,9 @@ directly) against an existing container **without** `--expose-lan` /
 `--no-expose-lan` **preserves** whichever mode is already configured -
 it won't silently put an exposed deployment back behind a tunnel. Pass
 `--no-expose-lan` explicitly to force tunnel-only access again.
+`--webapp-expose-lan` doesn't preserve like this - it defaults to
+tunnel-only on every run, so pass it again explicitly if you want it to
+stick on a re-run.
 
 ## Project layout
 
@@ -113,6 +138,8 @@ it won't silently put an exposed deployment back behind a tunnel. Pass
 * `3-services/` - systemd units (Sway headless, WayVNC, noVNC, Waydroid session).
 * `4-waydroid-tools/` - Device spoofing, GPS, manual startup wrapper, Play
   Store emulated-storage workaround.
+* `5-webapp/` - Flask webapp/API for GPS control (map UI, favorites), with
+  noVNC unified behind its own port - see `5-webapp/README.md`.
 * `tests/` - `lint.sh` (static, no Proxmox needed) and `smoke-test.sh` (run
   inside the container after deployment).
 * `docs/` - Detailed debugging methodology.
@@ -156,7 +183,17 @@ rebuilding a kernel module:
 * **noVNC/wayvnc unauthenticated by default**: by design, this repo binds
   them to `127.0.0.1` and recommends an SSH tunnel. The `--expose-lan` /
   `EXPOSE_LAN=yes` flag lifts that restriction but **adds no
-  authentication** - only use it on a trusted local network.
+  authentication** - only use it on a trusted local network. (Only
+  applies when the webapp is skipped - see the next bullet.)
+* **Webapp: API-key-gated, but the remote screen it links to still isn't**
+  (`5-webapp/`, installed by default): the webapp itself requires a
+  per-deployment API key for every action, but by unifying noVNC behind
+  its own port (the default) it also becomes the thing controlling
+  noVNC's external reachability - `--webapp-expose-lan` /
+  `WEBAPP_EXPOSE_LAN=yes`, same trust model as `--expose-lan` above (no
+  authentication on the VNC view itself). See `5-webapp/README.md`'s
+  "Security" section for the full breakdown (favorites stored in plain
+  JSON, Nominatim as a third-party geocoding dependency, etc.).
 * **Unsigned third-party tool, applied automatically**
   (`4-waydroid-tools/03-setup-tools.sh` + `apply-spoof.sh`):
   `spoof-device.sh` is downloaded from an individual GitHub repo (`main`

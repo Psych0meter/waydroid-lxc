@@ -23,10 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APK="${SCRIPT_DIR}/mock-location.apk"
 PKG="io.appium.settings"
 
-# waydroid-session.service runs its own isolated D-Bus session bus. An
-# interactive shell doesn't have it by default, and 'waydroid' CLI
-# commands then wrongly report the session as stopped (see
-# docs/DEBUGGING_AND_TESTS.md, Phase 3).
+# waydroid-session.service runs its own isolated D-Bus session bus; an
+# interactive shell doesn't have it by default (see docs Phase 3).
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/waydroid-dbus/session}"
 
 if ! command -v waydroid >/dev/null 2>&1; then

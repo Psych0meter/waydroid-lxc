@@ -484,6 +484,15 @@ that one script but without going through `0-deploy-all.sh`'s
 container-creation step. To check the current state at any time:
 `pct exec <CTID> -- grep ExecStart /etc/systemd/system/novnc.service`.
 
+**None of the above has any visible effect once the webapp is installed**
+with its default `WEBAPP_UNIFY_VNC=yes` (`5-webapp/install-webapp.sh`,
+run automatically by `0-deploy-all.sh` unless `--skip-webapp` was
+passed) - it forces `novnc.service`'s `ExecStart` back to `127.0.0.1`
+every time it runs, since nginx becomes the sole external gateway for
+both. `WEBAPP_EXPOSE_LAN` / `--webapp-expose-lan` (on `install-webapp.sh`
+or `0-deploy-all.sh`) is what controls exposure in that mode - see
+`5-webapp/README.md`.
+
 **Enabling headless adb on an already-deployed container** (fixes `adb
 devices` showing `unauthorized` forever - see Phase 5): push the current
 `4-waydroid-tools/enable-adb.sh` if the container's copy predates it,
