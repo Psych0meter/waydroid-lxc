@@ -30,7 +30,13 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        # WEBAPP_UNIFY_VNC is written into webapp.env by install-webapp.sh
+        # (default "yes"): when the unified nginx gateway is in place, noVNC
+        # is reachable at /vnc/vnc.html on this same port, so show the link;
+        # in legacy mode (WEBAPP_UNIFY_VNC=no) noVNC is a separate
+        # port/service entirely and the webapp has no business linking to it.
+        show_vnc_link = os.environ.get("WEBAPP_UNIFY_VNC", "yes") == "yes"
+        return render_template("index.html", show_vnc_link=show_vnc_link)
 
     @app.get("/api/health")
     def health():

@@ -57,6 +57,35 @@ else
 fi
 
 echo ""
+echo "== nginx -t (if available) =="
+if command -v nginx >/dev/null 2>&1; then
+  # nginx-waydroid-webapp.conf is a template (__LISTEN__/__GUNICORN_PORT__
+  # placeholders, filled in by install-webapp.sh) - render it with dummy
+  # values first, the same way install-webapp.sh does, then wrap it in a
+  # minimal events{}/http{} context (it has no server_name/mime.types/etc.
+  # of its own to test standalone) and run it through nginx -t, the same
+  # technique proven against a real nginx+websockify+gunicorn stack during
+  # development of this feature.
+  NGINX_TEST_DIR="$(mktemp -d)"
+  sed \
+    -e "s|__LISTEN__|127.0.0.1:18088|g" \
+    -e "s|__GUNICORN_PORT__|18089|g" \
+    5-webapp/nginx-waydroid-webapp.conf > "${NGINX_TEST_DIR}/site.conf"
+  cat > "${NGINX_TEST_DIR}/nginx.conf" <<EOF
+events {}
+http {
+  include ${NGINX_TEST_DIR}/site.conf;
+}
+EOF
+  if ! nginx -t -c "${NGINX_TEST_DIR}/nginx.conf"; then
+    FAIL=1
+  fi
+  rm -rf "${NGINX_TEST_DIR}"
+else
+  echo "nginx not installed, skipping this step (apt-get install nginx)."
+fi
+
+echo ""
 echo "== Manual .service validation (key=value pairs) =="
 for f in 3-services/*.service 5-webapp/*.service; do
   if ! grep -q '^\[Unit\]' "$f" || ! grep -q '^\[Service\]' "$f"; then
@@ -80,7 +109,8 @@ if [[ ! -f "2-lxc-setup/sway-headless-config" ]]; then
 fi
 for ref in requirements.txt waydroid-webapp.service app.py auth.py \
            actions/base.py actions/gps.py actions/geocode.py actions/favorites.py \
-           routes/gps.py routes/geocode.py routes/favorites.py templates/index.html; do
+           routes/gps.py routes/geocode.py routes/favorites.py templates/index.html \
+           nginx-waydroid-webapp.conf; do
   if [[ ! -f "5-webapp/${ref}" ]]; then
     echo "MISSING FILE referenced by install-webapp.sh/app.py: 5-webapp/${ref}"
     FAIL=1

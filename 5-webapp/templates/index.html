@@ -10,7 +10,12 @@
 <body>
   <header>
     <h1>Waydroid Control</h1>
-    <button id="api-key-btn" type="button" title="Set API key">API key</button>
+    <div id="header-actions">
+      {% if show_vnc_link %}
+      <a id="vnc-link" href="/vnc/vnc.html" target="_blank" rel="noopener">Remote screen &#8599;</a>
+      {% endif %}
+      <button id="api-key-btn" type="button" title="Set API key">API key</button>
+    </div>
   </header>
 
   <main>

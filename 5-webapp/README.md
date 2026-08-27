@@ -17,18 +17,22 @@ mock-location app already installed):
 
 This creates a Python virtualenv, vendors Leaflet locally (no CDN, no API
 key), installs the `waydroid-webapp` systemd service, and prints the
-generated API key plus how to reach the UI. By default the service binds
-`127.0.0.1` only - see "Security" below.
+generated API key plus how to reach the UI. By default (see "Unified
+webapp + noVNC gateway" below) it also installs nginx as the single
+external entry point for both the webapp and noVNC, bound to `127.0.0.1`
+only unless `WEBAPP_EXPOSE_LAN=yes` - see "Security" below.
 
 Environment variables (all optional, all re-runnable):
 
-| Variable              | Default                                    | Meaning |
-|------------------------|---------------------------------------------|---------|
-| `WEBAPP_EXPOSE_LAN`    | preserves current setting, else `no`         | `yes` binds `0.0.0.0` instead of `127.0.0.1` |
-| `WEBAPP_PORT`          | `8088`                                       | TCP port |
-| `WAYDROID_TOOLS_DIR`   | `/opt/waydroid-lxc-deploy/4-waydroid-tools`  | where `change-location.sh` lives |
-| `WEBAPP_DATA_DIR`      | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
-| `LEAFLET_VERSION`      | `1.9.4`                                      | pinned Leaflet release to vendor |
+| Variable                | Default                                    | Meaning |
+|--------------------------|---------------------------------------------|---------|
+| `WEBAPP_EXPOSE_LAN`      | preserves current setting, else `no`         | `yes` binds `0.0.0.0` instead of `127.0.0.1` (on nginx's listener when `WEBAPP_UNIFY_VNC=yes`, on gunicorn's own otherwise) |
+| `WEBAPP_PORT`            | `8088`                                       | the port you actually connect to - stable across both modes |
+| `WEBAPP_UNIFY_VNC`       | `yes`                                        | `yes` fronts both the webapp and noVNC with nginx on one port; `no` keeps the old two-port setup |
+| `WEBAPP_INTERNAL_PORT`   | `8089`                                       | only used when `WEBAPP_UNIFY_VNC=yes`: gunicorn's own loopback-only port, behind nginx, never reachable directly |
+| `WAYDROID_TOOLS_DIR`     | `/opt/waydroid-lxc-deploy/4-waydroid-tools`  | where `change-location.sh` lives |
+| `WEBAPP_DATA_DIR`        | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
+| `LEAFLET_VERSION`        | `1.9.4`                                      | pinned Leaflet release to vendor |
 
 ## Using it
 
@@ -40,6 +44,10 @@ calls `change-location.sh` with the resulting coordinates. "Save
 favorite" saves whatever's currently in the coordinate fields under a
 name of your choice; the favorites list below it filters as you type and
 each entry re-applies its saved location with one click.
+
+When `WEBAPP_UNIFY_VNC=yes` (the default), a "Remote screen" link appears
+in the header next to "API key", opening noVNC at `/vnc/vnc.html` in a
+new tab - see "Unified webapp + noVNC gateway" below.
 
 Or drive the API directly:
 
@@ -88,6 +96,7 @@ routes/
   geocode.py      Blueprint: HTTP glue for actions/geocode.py.
   favorites.py    Blueprint: HTTP glue for actions/favorites.py.
 templates/, static/  Leaflet-based single-page UI (vendored Leaflet, no CDN).
+nginx-waydroid-webapp.conf  Template for the unified gateway's nginx site (installed when WEBAPP_UNIFY_VNC=yes) - see below.
 ```
 
 `actions/` holds plain functions with no Flask/HTTP knowledge: they take
@@ -129,6 +138,41 @@ action is really "do an existing action, with different inputs" (a
 scheduled/recurring version of an existing action, a batch variant,
 etc.) instead of duplicating logic.
 
+## Unified webapp + noVNC gateway
+
+By default (`WEBAPP_UNIFY_VNC=yes`), `install-webapp.sh` installs nginx
+as a single external gateway in front of both this webapp and noVNC, so
+only one port needs to be reachable or tunneled for everything:
+
+* `/` (and everything else not matched below) proxies to gunicorn, which
+  now binds `127.0.0.1:${WEBAPP_INTERNAL_PORT}` (default `8089`) instead
+  of being reachable directly.
+* `/vnc/` proxies to websockify's static file server (`vnc.html`, its
+  `app/`/`core/`/`vendor/` assets), with the `/vnc/` prefix stripped so
+  the files resolve exactly as noVNC expects.
+* `/websockify` proxies noVNC's websocket connection, as its own
+  top-level location - **not** nested under `/vnc/`. This isn't
+  arbitrary: the installed noVNC package (`app/ui.js`) hardcodes its
+  websocket path setting to the literal string `websockify` and builds
+  the connection URL as `ws(s)://<page's own host:port>/websockify` -
+  root-absolute, regardless of what subpath `vnc.html` was itself loaded
+  from. Nesting it under `/vnc/websockify` would silently break the
+  connection, since the browser never asks for that path.
+
+This also moves `novnc.service` to bind `127.0.0.1:6080`/`5900`
+permanently - `install-webapp.sh` rewrites its `ExecStart=` on every run
+- so `3-services/02-install-services.sh`'s own `EXPOSE_LAN` toggle for
+noVNC stops being the thing that controls external reachability;
+`WEBAPP_EXPOSE_LAN` (this script) is now the single switch for both
+services, since nginx is the only remaining exposure point.
+
+Pass `WEBAPP_UNIFY_VNC=no` to skip all of this and keep the old
+two-port setup, where the webapp and noVNC are each reachable/exposed
+independently and noVNC's own `EXPOSE_LAN` in `02-install-services.sh`
+applies as before. Requires `3-services/02-install-services.sh` to have
+already installed `novnc.service` (the script errors out early if it
+hasn't, rather than installing a gateway with nothing behind half of it).
+
 ## Security
 
 Same "documented trade-off, LAN-only trust boundary" posture as the rest
@@ -154,7 +198,17 @@ of this repo (see the top-level README's "Security" section):
   loading the page alone can't control the device.
 * **Bound to 127.0.0.1 by default** - use an SSH tunnel
   (`ssh -L 8088:127.0.0.1:8088 ...`) unless `WEBAPP_EXPOSE_LAN=yes` was
-  passed, same as noVNC.
+  passed. With `WEBAPP_UNIFY_VNC=yes` (the default) this single bind
+  controls both the webapp and noVNC, since nginx is the only thing
+  either is reachable through; gunicorn and `novnc.service` both bind
+  `127.0.0.1` unconditionally, and the stock nginx default site (port
+  80) is disabled so it doesn't sit there as an unused extra open port.
+* **`/vnc/vnc.html` (noVNC) has no authentication of its own, unchanged
+  from before** - unifying it behind nginx doesn't add a login to it;
+  anyone who can reach the webapp's port can also reach the remote
+  screen. The API key gates webapp *actions* only, not the VNC view -
+  treat exposure of this port (`WEBAPP_EXPOSE_LAN=yes`) the same as you
+  would have treated exposing noVNC directly.
 * **Nominatim (address search) is a public, unauthenticated third-party
   service** - subject to its usage policy (roughly 1 request/second,
   descriptive User-Agent, no heavy automated use); fine for occasional

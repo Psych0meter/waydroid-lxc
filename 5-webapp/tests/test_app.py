@@ -89,6 +89,17 @@ class HealthAndIndexTest(WebappTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Waydroid Control", resp.data)
 
+    def test_index_shows_vnc_link_by_default(self):
+        # WEBAPP_UNIFY_VNC is unset in the test environment - app.py's
+        # index() route defaults it to "yes", same as install-webapp.sh.
+        resp = self.client.get("/")
+        self.assertIn(b'id="vnc-link"', resp.data)
+
+    def test_index_hides_vnc_link_when_unify_disabled(self):
+        with mock.patch.dict(os.environ, {"WEBAPP_UNIFY_VNC": "no"}):
+            resp = self.client.get("/")
+        self.assertNotIn(b'id="vnc-link"', resp.data)
+
 
 class AuthTest(WebappTestCase):
     def test_missing_key_rejected(self):
