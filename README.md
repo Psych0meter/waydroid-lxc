@@ -31,10 +31,14 @@ below). To expose it directly on the LAN (without a password):
 ```
 
 `community-scripts/ProxmoxVE` is an independent third-party project;
-`0-deploy-all.sh` downloads and runs its `ct/debian.sh` script on every run.
-If you'd rather not run third-party code automatically, create the
-container manually (see "Manual deployment" below) and resume from step 3
-with `--ctid <ID>`.
+`0-deploy-all.sh` downloads and runs its `ct/debian.sh` script **on every
+run**, including when `--ctid` points at an already-existing container -
+only the LXC config injection step (step 3) is actually guarded against
+re-running. If you'd rather not run third-party code against an existing
+container, or just want to change a setting like `--expose-lan` on an
+already-deployed one, use the manual per-step scripts below instead of
+rerunning `0-deploy-all.sh` (see `docs/DEBUGGING_AND_TESTS.md`, Phase 6, for
+the targeted commands).
 
 ## Manual deployment (step by step)
 

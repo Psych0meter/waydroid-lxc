@@ -270,10 +270,38 @@ built-in mechanism.
 
 ## Phase 6: Redeploying / re-running
 
-All the install scripts (`01-install-waydroid.sh`, `02-install-services.sh`,
-`03-setup-tools.sh`) are designed to be re-run without breaking an existing
-deployment (idempotency checks on `waydroid init`, clean overwrite of
-systemd units). `0-deploy-all.sh` can be rerun with `--ctid <existing ID>`
-to resume an interrupted deployment after the container was created (it
-won't recreate the container if the binder configuration is already present
-in the `.conf`).
+The three in-container install scripts are safe to re-run directly against
+an already-deployed container, and each guards its own expensive step:
+`01-install-waydroid.sh` skips `waydroid init` if `/var/lib/waydroid/images`
+already exists, `02-install-services.sh` always does a clean overwrite of
+its systemd units (and now unconditionally `restart`s them, so re-running
+with a different `EXPOSE_LAN` value actually takes effect - see below), and
+`03-setup-tools.sh` just re-downloads `spoof-device.sh`. For an existing
+container, run them directly with `pct exec <CTID> -- ...` (see "Manual
+deployment" in the README) rather than through `0-deploy-all.sh`.
+
+**`0-deploy-all.sh --ctid <existing ID>` is not the same kind of safe.**
+Only step 3 (LXC config injection) is actually idempotency-guarded - it
+skips re-appending if `lxc.apparmor.profile: unconfined` is already in the
+`.conf`. Step 2, the container-creation call to the third-party
+`community-scripts/ProxmoxVE` `ct/debian.sh` script, runs **unconditionally
+on every invocation**, including with `--ctid` set to an existing container.
+That script isn't maintained by this repo, and its behavior when pointed at
+an existing CTID (update in place vs. attempt to recreate) isn't verified
+here. Don't rerun the full `0-deploy-all.sh` pipeline against a working
+container just to change a setting like `--expose-lan` - use the targeted
+commands below, or the manual per-step scripts above, instead.
+
+**Toggling `--expose-lan` / `EXPOSE_LAN` on an existing container**, without
+touching the container itself:
+```bash
+# On the Proxmox host
+pct exec <CTID> -- sed -i 's/127\.0\.0\.1:6080 127\.0\.0\.1:5900/0.0.0.0:6080 127.0.0.1:5900/' /etc/systemd/system/novnc.service
+pct exec <CTID> -- systemctl daemon-reload
+pct exec <CTID> -- systemctl restart novnc
+```
+(Reverse the `sed` pattern - swap `0.0.0.0:6080` back to `127.0.0.1:6080` -
+to return to SSH-tunnel-only access.) This is exactly what a re-run of
+`02-install-services.sh` with the matching `EXPOSE_LAN` value now does, so
+it's equivalent to re-running that one script but without going through
+`0-deploy-all.sh`'s container-creation step.

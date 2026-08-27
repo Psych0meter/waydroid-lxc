@@ -47,10 +47,13 @@ fi
 echo "Reloading systemd and enabling services..."
 systemctl daemon-reload
 
-systemctl enable --now sway
-systemctl enable --now wayvnc
-systemctl enable --now novnc
-systemctl enable --now waydroid-container.service
+# 'enable --now' only starts a unit that isn't already running - on a
+# re-run (e.g. toggling EXPOSE_LAN on an existing deployment), a live
+# novnc.service would keep its old ExecStart despite the sed above until
+# something restarts it. 'restart' both starts a stopped unit and reloads
+# an active one, so it's used unconditionally here.
+systemctl enable sway wayvnc novnc waydroid-container.service
+systemctl restart sway wayvnc novnc waydroid-container.service
 
 # Not started here: Android's first boot can take minutes, better triggered
 # explicitly once the rest is confirmed working.
