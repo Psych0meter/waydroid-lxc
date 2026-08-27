@@ -222,19 +222,44 @@ Store download paths ("Can't create file" errors in logcat rather than
 * Manual alternative (without systemd): `4-waydroid-tools/start-waydroid.sh`.
 
 ## Phase 4: Test Device Spoofing
-1. Stop Waydroid: `systemctl stop waydroid-session` (or `waydroid session stop`)
-2. Navigate to `4-waydroid-tools/` and run `./spoof-device.sh`. Note: the
-   upstream script (Quackdoc/waydroid-scripts) applies a single fixed
-   Pixel 5 profile - there is no menu or profile choice, despite what
-   older instructions may say.
-3. Restart Waydroid: `systemctl start waydroid-session`
-4. Open the Android settings app inside your web UI and navigate to "About
+
+`spoof-device.sh` (Quackdoc/waydroid-scripts) applies a single fixed
+Pixel 5 profile - there is no menu or profile choice, despite what older
+instructions may say. It works by **appending** `ro.product.*`/
+`ro.build.*` lines to `/var/lib/waydroid/waydroid_base.prop`. That file is
+only read when Waydroid mounts the Android rootfs, which happens when the
+underlying **container** (`waydroid-container.service`, from the waydroid
+package - the nested LXC that holds the Android image) starts, not when a
+**session** (`waydroid-session.service`, this repo's unit) starts. So
+applying a spoof needs a container restart, not just a session restart:
+
+1. Navigate to `4-waydroid-tools/` and run `./spoof-device.sh` (safe to run
+   with Waydroid up or down - it only edits a file, sourced later).
+2. Stop the session: `systemctl stop waydroid-session`
+3. Restart the container so it re-reads `waydroid_base.prop`:
+   `systemctl restart waydroid-container`
+4. Start the session again: `systemctl start waydroid-session`
+5. Open the Android settings app inside your web UI and navigate to "About
    Phone" to verify the new identity.
-* **Known issue**: `sudo: command not found`. The upstream script
-  unconditionally shells out to `sudo`, which isn't installed in this
-  minimal container (everything here already runs as root, so elevation
-  isn't actually needed). Fix with `apt-get install -y sudo`, or edit your
-  local copy of `spoof-device.sh` to drop the `sudo ` prefix.
+
+* **Known issue**: device still reports as generic "WayDroid x86_64"
+  after running `spoof-device.sh`, with no error printed. Two independent
+  causes, both fixed by `03-setup-tools.sh` (as of this repo's current
+  version) but worth knowing about if you deployed an older copy or a
+  hand-downloaded script:
+  - `sudo: command not found` on every line of the script's output: the
+    upstream script unconditionally shells out to `sudo`, which isn't
+    installed in this minimal container (everything here already runs as
+    root, so elevation isn't actually needed). Since the script has no
+    `set -e`, it still exits 0 with **none** of the properties actually
+    written - `03-setup-tools.sh` now strips the `sudo ` prefix right after
+    downloading it, so this shouldn't reoccur; if you hit it anyway, either
+    `apt-get install -y sudo` or edit your local copy of `spoof-device.sh`
+    to drop the `sudo ` prefix.
+  - Only restarting `waydroid-session` (step 2-4 above) instead of also
+    restarting `waydroid-container`: the properties get written to
+    `waydroid_base.prop` correctly, but nothing re-reads that file until
+    the container itself remounts the rootfs.
 
 ## Phase 5: Test Fake GPS Injection
 
