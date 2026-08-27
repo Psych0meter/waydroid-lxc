@@ -231,10 +231,20 @@ only read when Waydroid mounts the Android rootfs, which happens when the
 underlying **container** (`waydroid-container.service`, from the waydroid
 package - the nested LXC that holds the Android image) starts, not when a
 **session** (`waydroid-session.service`, this repo's unit) starts. So
-applying a spoof needs a container restart, not just a session restart:
+applying a spoof needs a container restart, not just a session restart.
 
-1. Navigate to `4-waydroid-tools/` and run `./spoof-device.sh` (safe to run
-   with Waydroid up or down - it only edits a file, sourced later).
+Don't run `spoof-device.sh` directly - it isn't idempotent (running it
+twice appends the same block twice) and offers no way back. Use
+`4-waydroid-tools/apply-spoof.sh` instead, which wraps it:
+
+1. Navigate to `4-waydroid-tools/` and run `./apply-spoof.sh`. The first
+   time it runs, it snapshots the current `waydroid_base.prop` to
+   `waydroid_base.prop.orig` before touching anything; every run (first or
+   repeat) then applies `spoof-device.sh` and deduplicates the file by
+   property key, keeping the latest value - so re-running it (e.g. after
+   `SPOOF_REF` picks up an upstream change) replaces old values instead of
+   piling up duplicates. Safe to run with Waydroid up or down - it only
+   edits a file, read later.
 2. Stop the session: `systemctl stop waydroid-session`
 3. Restart the container so it re-reads `waydroid_base.prop`:
    `systemctl restart waydroid-container`
@@ -242,11 +252,19 @@ applying a spoof needs a container restart, not just a session restart:
 5. Open the Android settings app inside your web UI and navigate to "About
    Phone" to verify the new identity.
 
+To go back to the pre-spoof configuration: `./apply-spoof.sh --rollback`,
+then repeat steps 2-4 above to apply it. Note this restores whatever the
+file looked like right before the *first* time `apply-spoof.sh` ran on
+this container - if you already spoofed manually (via `spoof-device.sh`
+directly) before this wrapper existed, that snapshot reflects the
+already-spoofed state, not the true `waydroid init` defaults; for a
+genuinely clean slate in that case, re-run `waydroid init -f` instead.
+
 * **Known issue**: device still reports as generic "WayDroid x86_64"
-  after running `spoof-device.sh`, with no error printed. Two independent
-  causes, both fixed by `03-setup-tools.sh` (as of this repo's current
-  version) but worth knowing about if you deployed an older copy or a
-  hand-downloaded script:
+  after applying a spoof, with no error printed. Two independent causes,
+  both handled by `apply-spoof.sh`/`03-setup-tools.sh` (as of this repo's
+  current version) but worth knowing about if you deployed an older copy
+  or a hand-downloaded script:
   - `sudo: command not found` on every line of the script's output: the
     upstream script unconditionally shells out to `sudo`, which isn't
     installed in this minimal container (everything here already runs as

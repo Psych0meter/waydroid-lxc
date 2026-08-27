@@ -109,7 +109,7 @@ use.
   app will close as it does not support devices with modified system"*.
   This is **intentional** app behavior, not a bug in this deployment:
   Waydroid isn't a Google-certified Android device (no locked bootloader,
-  no hardware attestation). `4-waydroid-tools/spoof-device.sh` (spoofing
+  no hardware attestation). `4-waydroid-tools/apply-spoof.sh` (spoofing
   system properties) may be enough for apps that only check "basic"
   integrity, but **no reliable workaround exists** for apps requiring
   "STRONG" integrity (real hardware attestation) - that's a fundamental
@@ -133,7 +133,11 @@ rebuilding a kernel module:
 * **Unsigned third-party tool** (`4-waydroid-tools/03-setup-tools.sh`):
   `spoof-device.sh` is downloaded from an individual GitHub repo (`main`
   by default). Set `SPOOF_REF` to pin a specific commit, and review its
-  content first if your threat model requires it. GPS spoofing
+  content first if your threat model requires it. Apply it via
+  `4-waydroid-tools/apply-spoof.sh` rather than running it directly - the
+  wrapper snapshots the pre-spoof configuration and makes re-applying it
+  idempotent, and can roll the change back (see
+  `docs/DEBUGGING_AND_TESTS.md`, Phase 4). GPS spoofing
   (`change-location.sh`) uses Waydroid's own `persist.waydroid.fake_gps`
   property directly and needs no download.
 * **`curl | bash`** for the official Waydroid installer (`repo.waydro.id`,
