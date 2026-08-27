@@ -6,10 +6,12 @@
 # community-scripts/ProxmoxVE, injects the binder/apparmor/cgroup config,
 # restarts the container, then runs the install scripts inside it in order
 # (2-lxc-setup -> 3-services -> 4-waydroid-tools), applying the Pixel 5
-# device spoof and restarting the container before Waydroid's first boot
-# (pass --skip-spoof to leave it downloaded but unapplied), then - once
-# the session is up - installing and configuring the GPS mock-location
-# app (pass --skip-gps-setup to leave it downloaded but unconfigured).
+# device spoof (pass --skip-spoof to leave it downloaded but unapplied)
+# and always enabling headless adb authorization (ro.adb.secure=0 - see
+# 4-waydroid-tools/enable-adb.sh), then restarting the container before
+# Waydroid's first boot, then - once the session is up - installing and
+# configuring the GPS mock-location app (pass --skip-gps-setup to leave
+# it downloaded but unconfigured).
 #
 # ct/debian.sh from community-scripts is normally interactive (whiptail);
 # this wrapper pre-fills its var_* environment variables to force
@@ -204,15 +206,19 @@ pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && bash 03-se
 if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
   echo "    -> Applying device spoof (Pixel 5) before Waydroid's first boot..."
   pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x apply-spoof.sh && ./apply-spoof.sh"
-  # waydroid-session isn't running yet on a fresh deployment, but might be
-  # on a re-run against an existing container - stop it first (harmless if
-  # already stopped) so the container restart below is what actually
-  # applies the new waydroid_base.prop, not a no-op on an active session.
-  pct exec "${CTID}" -- systemctl stop waydroid-session >/dev/null 2>&1 || true
-  pct exec "${CTID}" -- systemctl restart waydroid-container
 else
   echo "    -> --skip-spoof: spoof-device.sh downloaded but not applied (see 4-waydroid-tools/apply-spoof.sh)."
 fi
+
+echo "    -> Enabling headless adb authorization (ro.adb.secure=0) before Waydroid's first boot..."
+pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x enable-adb.sh && ./enable-adb.sh"
+
+# waydroid-session isn't running yet on a fresh deployment, but might be
+# on a re-run against an existing container - stop it first (harmless if
+# already stopped) so the container restart below is what actually
+# applies the new waydroid_base.prop, not a no-op on an active session.
+pct exec "${CTID}" -- systemctl stop waydroid-session >/dev/null 2>&1 || true
+pct exec "${CTID}" -- systemctl restart waydroid-container
 
 echo "==> [5/5] Starting the Waydroid session"
 pct exec "${CTID}" -- systemctl enable --now waydroid-session.service

@@ -353,10 +353,29 @@ replacement.
   reports `Session: RUNNING`. If it still doesn't connect, try `waydroid
   adb connect` by hand and check its error output.
 * **Known issue**: `setup-gps.sh` fails with `adb connected but no device
-  is listed as ready yet`. Run `adb devices` by hand - a device listed as
-  `offline` instead of `device` usually clears up within a few seconds on
-  its own (the Android side is still finishing its handshake); re-run
-  `setup-gps.sh` once it shows `device`.
+  is listed as ready yet`, and `adb devices` by hand shows `offline`:
+  usually clears up within a few seconds on its own (the Android side is
+  still finishing its handshake); re-run `setup-gps.sh` once it shows
+  `device`.
+* **Known issue, root cause confirmed**: `adb devices` shows
+  `unauthorized` instead of `device`, indefinitely - this is normal
+  Android adb behavior, not a bug: by default (`ro.adb.secure=1`, set by
+  `waydroid init`), the **first** connection from any given host requires
+  RSA-key authorization via an "Allow USB debugging from this computer?"
+  popup, which (same as physical-device adb) has to be tapped on the
+  Android side before the connection is trusted - `adb`/`waydroid adb
+  connect` alone can never get past this on their own. In this headless
+  deployment there's nowhere reliable for that tap to come from, so the
+  connection stays `unauthorized` forever. `4-waydroid-tools/enable-adb.sh`
+  fixes this **at the source** by setting `ro.adb.secure=0` in
+  `waydroid_base.prop` before Waydroid's first boot - the same setting
+  real Android emulators ship with by default, for the same reason - so
+  adbd skips RSA authorization entirely and `adb devices` reports `device`
+  immediately on connect. `0-deploy-all.sh` now runs this automatically,
+  unconditionally (not tied to `--skip-spoof`), before every first boot.
+  Like the Pixel 5 spoof, `ro.*` properties lock once Android has booted,
+  so this only takes effect on the next **container** restart - see the
+  hotfix commands below if you're fixing an already-deployed container.
 * **Known issue (legacy)**: `java.lang.NullPointerException` in
   `SettingsProvider.mutateGlobalSetting` from a command like `waydroid
   shell -- settings put global adb_enabled 1`. This came from an earlier
@@ -442,3 +461,19 @@ matching `EXPOSE_LAN` value now does, so it's equivalent to re-running
 that one script but without going through `0-deploy-all.sh`'s
 container-creation step. To check the current state at any time:
 `pct exec <CTID> -- grep ExecStart /etc/systemd/system/novnc.service`.
+
+**Enabling headless adb on an already-deployed container** (fixes `adb
+devices` showing `unauthorized` forever - see Phase 5): push the current
+`4-waydroid-tools/enable-adb.sh` if the container's copy predates it,
+then run it and restart the container:
+```bash
+# On the Proxmox host
+pct push <CTID> 4-waydroid-tools/enable-adb.sh /opt/waydroid-lxc-deploy/4-waydroid-tools/enable-adb.sh --perms 755
+pct exec <CTID> -- bash -c "cd /opt/waydroid-lxc-deploy/4-waydroid-tools && ./enable-adb.sh"
+pct exec <CTID> -- systemctl stop waydroid-session
+pct exec <CTID> -- systemctl restart waydroid-container
+pct exec <CTID> -- systemctl start waydroid-session
+```
+Then re-run `setup-gps.sh` (it will install `adb` if needed and connect
+cleanly this time) and confirm with `pct exec <CTID> -- adb devices` -
+it should show `device`, not `unauthorized`.

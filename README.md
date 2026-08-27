@@ -21,10 +21,13 @@ This script:
    `/etc/pve/lxc/<CTID>.conf` and restarts the container.
 4. Copies this repo into the container and runs, in order, the Waydroid
    install, the systemd services, then the spoofing/GPS tools -
-   automatically **applying** the Pixel 5 device spoof and restarting the
-   container before Waydroid's first boot, so About Phone already shows
-   Pixel 5 the first time you open it. Pass `--skip-spoof` to leave
-   `spoof-device.sh` downloaded but unapplied.
+   automatically **applying** the Pixel 5 device spoof (pass
+   `--skip-spoof` to leave `spoof-device.sh` downloaded but unapplied)
+   and always enabling headless adb authorization
+   (`4-waydroid-tools/enable-adb.sh`, needed for GPS mock-location to
+   work without a human clicking an "Allow USB debugging" popup in
+   noVNC), then restarting the container before Waydroid's first boot,
+   so About Phone already shows Pixel 5 the first time you open it.
 5. Enables `waydroid-session.service` (auto-start on boot) and, once the
    session is up, installs and configures the GPS mock-location app
    automatically (pass `--skip-gps-setup` to leave it for later).
@@ -59,11 +62,17 @@ the targeted commands).
 7. Optional, to spoof the device as a Pixel 5 before first boot (skip this
    step if you'd rather leave it stock, or review `spoof-device.sh` first):
    `4-waydroid-tools/apply-spoof.sh`
-8. `systemctl start waydroid-session`
-9. Optional, to enable GPS mock locations (needs the session running,
-   unlike the spoof step above): `4-waydroid-tools/setup-gps.sh`, then
-   `4-waydroid-tools/change-location.sh <lat> <lng>`.
-10. Access: see the message printed at the end of installation, or the
+8. `4-waydroid-tools/enable-adb.sh` (sets `ro.adb.secure=0` before first
+   boot - needed so `adb`/GPS mock-location can authenticate without a
+   human clicking an authorization popup in noVNC; see "Security" below).
+   Then, since this and/or the spoof step above only take effect on the
+   Android container's next start: `systemctl stop waydroid-session &&
+   systemctl restart waydroid-container`
+9. `systemctl start waydroid-session`
+10. Optional, to enable GPS mock locations (needs the session running,
+    unlike the two steps above): `4-waydroid-tools/setup-gps.sh`, then
+    `4-waydroid-tools/change-location.sh <lat> <lng>`.
+11. Access: see the message printed at the end of installation, or the
     "Accessing the interface" section below.
 
 ## Accessing the interface
@@ -159,6 +168,17 @@ rebuilding a kernel module:
   rather than running `spoof-device.sh` directly - the wrapper snapshots
   the pre-spoof configuration and makes re-applying it idempotent, and can
   roll the change back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4).
+* **`ro.adb.secure=0`, applied automatically** (`4-waydroid-tools/enable-adb.sh`):
+  disables Android's normal adb RSA-key authorization popup, the same way
+  real emulators do by default, so `adb`/`waydroid adb connect` (and
+  therefore GPS mock-location) work without a human clicking "Allow USB
+  debugging" in noVNC at the exact moment Android boots. This means *any*
+  host that can reach the container's `waydroid0` bridge IP can attach a
+  full adb shell with no authentication - in practice that bridge is only
+  reachable from inside the LXC itself, not the wider LAN, so the exposure
+  is no broader than `waydroid shell` already has. Roll back with
+  `4-waydroid-tools/apply-spoof.sh --rollback` (shares its backup/restore
+  with the spoof step) followed by a container restart.
 * **Signed third-party app, installed automatically** (GPS mock location):
   `4-waydroid-tools/setup-gps.sh` installs the official, open-source
   Appium **Settings** app (`io.appium.settings`, a signed release from the

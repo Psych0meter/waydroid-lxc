@@ -17,6 +17,11 @@
 #
 # Either way, a container restart is required for the change to take
 # effect - see docs/DEBUGGING_AND_TESTS.md, Phase 4.
+#
+# enable-adb.sh (headless adb authorization) edits the same file and
+# shares this snapshot: whichever of the two scripts runs first on a
+# given container captures it, and '--rollback' here undoes both changes
+# at once.
 set -euo pipefail
 
 BASE_PROP="/var/lib/waydroid/waydroid_base.prop"
