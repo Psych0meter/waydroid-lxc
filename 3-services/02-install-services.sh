@@ -4,6 +4,9 @@
 # wayvnc/websockify listen on 127.0.0.1 by default (SSH tunnel access - see
 # README "Security"). To expose them on the LAN (no VNC authentication!):
 #   EXPOSE_LAN=yes ./02-install-services.sh
+# Re-running without EXPOSE_LAN set preserves whichever mode is already
+# configured (see the EXPOSE_LAN resolution below) - pass EXPOSE_LAN=no
+# explicitly to force it back to tunnel-only.
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
@@ -11,7 +14,24 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-EXPOSE_LAN="${EXPOSE_LAN:-no}"
+# EXPOSE_LAN semantics:
+#  - "yes" or "no": always honored explicitly, even on a re-run - lets you
+#    deliberately toggle LAN exposure.
+#  - unset: on a fresh install there's nothing to preserve (defaults to
+#    "no", the safe default); on a re-run against an already-configured
+#    novnc.service, PRESERVES whatever is already there instead of
+#    silently reverting a previous --expose-lan. Without this, re-running
+#    this script for an unrelated reason (e.g. to pick up a fix) would
+#    silently flip an exposed deployment back to tunnel-only, since the
+#    unit file gets overwritten from the pristine template below either way.
+if [[ -z "${EXPOSE_LAN:-}" ]]; then
+  if [[ -f /etc/systemd/system/novnc.service ]] && grep -q '0\.0\.0\.0:6080' /etc/systemd/system/novnc.service; then
+    EXPOSE_LAN="yes"
+    echo "EXPOSE_LAN not specified - novnc.service is already exposed on the LAN, preserving that."
+  else
+    EXPOSE_LAN="no"
+  fi
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

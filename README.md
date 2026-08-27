@@ -78,6 +78,12 @@ since noVNC itself has no authentication):
 
 then, from a machine connected to the VPN: `http://<LXC_IP>:6080/vnc.html`
 
+Re-running `0-deploy-all.sh` (or `3-services/02-install-services.sh`
+directly) against an existing container **without** `--expose-lan` /
+`--no-expose-lan` **preserves** whichever mode is already configured -
+it won't silently put an exposed deployment back behind a tunnel. Pass
+`--no-expose-lan` explicitly to force tunnel-only access again.
+
 ## Project layout
 
 * `0-deploy-all.sh` - Full orchestrator (host -> container -> services).

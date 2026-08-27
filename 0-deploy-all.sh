@@ -28,7 +28,12 @@ CT_NET="dhcp"
 CT_CPU=4
 CT_RAM=4096
 CT_DISK=16
-EXPOSE_LAN="no"
+# Left unset by default (not "no"): on a re-run against an existing
+# container, 02-install-services.sh preserves whatever EXPOSE_LAN mode is
+# already configured when this is unset, rather than silently reverting
+# it - see that script for details. --expose-lan / --no-expose-lan force
+# an explicit value either way.
+EXPOSE_LAN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,11 +44,15 @@ while [[ $# -gt 0 ]]; do
     --ram) CT_RAM="$2"; shift 2 ;;
     --disk) CT_DISK="$2"; shift 2 ;;
     --expose-lan) EXPOSE_LAN="yes"; shift 1 ;;
+    --no-expose-lan) EXPOSE_LAN="no"; shift 1 ;;
     -h|--help)
-      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan]"
+      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan|--no-expose-lan]"
       echo ""
-      echo "  --expose-lan  Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
-      echo "                By default, access goes through an SSH tunnel (see README)."
+      echo "  --expose-lan     Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
+      echo "  --no-expose-lan  Force tunnel-only access (SSH tunnel, see README), even on a re-run"
+      echo "                   against a container that currently has --expose-lan applied."
+      echo "  Passing neither on a fresh container defaults to tunnel-only; re-running against an"
+      echo "  existing container without either flag PRESERVES its current exposure setting."
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;
@@ -173,7 +182,13 @@ pct exec "${CTID}" -- systemctl enable --now waydroid-session.service
 
 CT_IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"
 
-if [[ "${EXPOSE_LAN}" == "yes" ]]; then
+# Query the container's actual, resolved state rather than trusting the
+# local $EXPOSE_LAN variable: when left unset, 02-install-services.sh
+# decides the real value itself (preserving whatever was already
+# configured on a re-run) inside that separate pct exec invocation.
+ACTUAL_EXPOSE_LAN="$(pct exec "${CTID}" -- bash -c "grep -q '0\.0\.0\.0:6080' /etc/systemd/system/novnc.service 2>/dev/null && echo yes || echo no")"
+
+if [[ "${ACTUAL_EXPOSE_LAN}" == "yes" ]]; then
   ACCESS_MSG="noVNC access: http://${CT_IP:-<CTID_IP>}:6080/vnc.html
    WARNING: exposed on the LAN WITHOUT authentication (--expose-lan)."
 else

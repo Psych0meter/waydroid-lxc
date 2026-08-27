@@ -317,11 +317,29 @@ The three in-container install scripts are safe to re-run directly against
 an already-deployed container, and each guards its own expensive step:
 `01-install-waydroid.sh` skips `waydroid init` if `/var/lib/waydroid/images`
 already exists, `02-install-services.sh` always does a clean overwrite of
-its systemd units (and now unconditionally `restart`s them, so re-running
-with a different `EXPOSE_LAN` value actually takes effect - see below), and
-`03-setup-tools.sh` just re-downloads `spoof-device.sh`. For an existing
-container, run them directly with `pct exec <CTID> -- ...` (see "Manual
-deployment" in the README) rather than through `0-deploy-all.sh`.
+its systemd units and unconditionally `restart`s them, so a re-run with a
+different `EXPOSE_LAN` actually takes effect, and `03-setup-tools.sh` just
+re-downloads `spoof-device.sh`. For an existing container, run them
+directly with `pct exec <CTID> -- ...` (see "Manual deployment" in the
+README) rather than through `0-deploy-all.sh`.
+
+**Known issue (fixed): re-running `02-install-services.sh` silently
+reverted `--expose-lan`.** `EXPOSE_LAN` used to default to `"no"` whenever
+the variable wasn't explicitly set to `"yes"` - so re-running the script
+for any unrelated reason (picking up a fix, redeploying with a newer copy
+of the repo) without re-passing `--expose-lan`/`EXPOSE_LAN=yes` silently
+regenerated `novnc.service` from the pristine tunnel-only template. Before
+the `enable --now` -> `restart` fix above, this reset didn't actually apply
+to an already-running `novnc.service`, which accidentally masked the bug;
+once `restart` was introduced, the same silent reset started taking real
+effect, breaking direct LAN access that had previously been enabled.
+`02-install-services.sh` now resolves `EXPOSE_LAN` explicitly: `"yes"` or
+`"no"` (env var, or `--expose-lan`/`--no-expose-lan` on `0-deploy-all.sh`)
+is always honored, even on a re-run; left **unset**, it inspects the
+*current* `novnc.service` on disk (if any) and preserves whatever mode is
+already configured, defaulting to `"no"` only when there's nothing to
+preserve (a fresh install). So a plain re-run with no flag now leaves
+whatever exposure setting you already had alone.
 
 **`0-deploy-all.sh --ctid <existing ID>` is not the same kind of safe.**
 Only step 3 (LXC config injection) is actually idempotency-guarded - it
@@ -335,16 +353,22 @@ here. Don't rerun the full `0-deploy-all.sh` pipeline against a working
 container just to change a setting like `--expose-lan` - use the targeted
 commands below, or the manual per-step scripts above, instead.
 
-**Toggling `--expose-lan` / `EXPOSE_LAN` on an existing container**, without
-touching the container itself:
+**Toggling LAN exposure on an existing container**, without touching the
+container itself (this rewrites the whole `ExecStart` line, so it's
+idempotent regardless of the unit's current state):
 ```bash
-# On the Proxmox host
-pct exec <CTID> -- sed -i 's/127\.0\.0\.1:6080 127\.0\.0\.1:5900/0.0.0.0:6080 127.0.0.1:5900/' /etc/systemd/system/novnc.service
+# On the Proxmox host - to EXPOSE noVNC on the LAN:
+pct exec <CTID> -- sed -i 's|^ExecStart=.*|ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 0.0.0.0:6080 127.0.0.1:5900|' /etc/systemd/system/novnc.service
+pct exec <CTID> -- systemctl daemon-reload
+pct exec <CTID> -- systemctl restart novnc
+
+# To go back to SSH-tunnel-only:
+pct exec <CTID> -- sed -i 's|^ExecStart=.*|ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 127.0.0.1:6080 127.0.0.1:5900|' /etc/systemd/system/novnc.service
 pct exec <CTID> -- systemctl daemon-reload
 pct exec <CTID> -- systemctl restart novnc
 ```
-(Reverse the `sed` pattern - swap `0.0.0.0:6080` back to `127.0.0.1:6080` -
-to return to SSH-tunnel-only access.) This is exactly what a re-run of
-`02-install-services.sh` with the matching `EXPOSE_LAN` value now does, so
-it's equivalent to re-running that one script but without going through
-`0-deploy-all.sh`'s container-creation step.
+This is exactly what a re-run of `02-install-services.sh` with the
+matching `EXPOSE_LAN` value now does, so it's equivalent to re-running
+that one script but without going through `0-deploy-all.sh`'s
+container-creation step. To check the current state at any time:
+`pct exec <CTID> -- grep ExecStart /etc/systemd/system/novnc.service`.
