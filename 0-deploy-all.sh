@@ -5,7 +5,9 @@
 # Pipeline: prepares the host, creates a privileged Debian 13 LXC via
 # community-scripts/ProxmoxVE, injects the binder/apparmor/cgroup config,
 # restarts the container, then runs the install scripts inside it in order
-# (2-lxc-setup -> 3-services -> 4-waydroid-tools).
+# (2-lxc-setup -> 3-services -> 4-waydroid-tools), applying the Pixel 5
+# device spoof and restarting the container before Waydroid's first boot
+# (pass --skip-spoof to leave it downloaded but unapplied).
 #
 # ct/debian.sh from community-scripts is normally interactive (whiptail);
 # this wrapper pre-fills its var_* environment variables to force
@@ -34,6 +36,11 @@ CT_DISK=16
 # it - see that script for details. --expose-lan / --no-expose-lan force
 # an explicit value either way.
 EXPOSE_LAN=""
+# Applies the Pixel 5 spoof automatically as part of deployment (see step
+# 4 below) - pass --skip-spoof to leave the downloaded spoof-device.sh
+# unapplied (e.g. if your threat model requires reviewing it first; see
+# the "Security" section of the README).
+SPOOF_DEVICE="yes"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,14 +52,20 @@ while [[ $# -gt 0 ]]; do
     --disk) CT_DISK="$2"; shift 2 ;;
     --expose-lan) EXPOSE_LAN="yes"; shift 1 ;;
     --no-expose-lan) EXPOSE_LAN="no"; shift 1 ;;
+    --skip-spoof) SPOOF_DEVICE="no"; shift 1 ;;
     -h|--help)
-      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan|--no-expose-lan]"
+      echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB] [--expose-lan|--no-expose-lan] [--skip-spoof]"
       echo ""
       echo "  --expose-lan     Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
       echo "  --no-expose-lan  Force tunnel-only access (SSH tunnel, see README), even on a re-run"
       echo "                   against a container that currently has --expose-lan applied."
       echo "  Passing neither on a fresh container defaults to tunnel-only; re-running against an"
       echo "  existing container without either flag PRESERVES its current exposure setting."
+      echo ""
+      echo "  --skip-spoof     Download spoof-device.sh (device identity spoofing) but don't run"
+      echo "                   it - by default this script applies it automatically, before the"
+      echo "                   Waydroid session's first boot, so About Phone shows Pixel 5 right"
+      echo "                   away. Use 4-waydroid-tools/apply-spoof.sh manually afterwards."
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;
@@ -177,6 +190,19 @@ pct exec "${CTID}" -- env "EXPOSE_LAN=${EXPOSE_LAN}" bash "${REMOTE_DIR}/3-servi
 echo "    -> Fetching Waydroid tools (device spoofing/GPS)..."
 pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && bash 03-setup-tools.sh"
 
+if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
+  echo "    -> Applying device spoof (Pixel 5) before Waydroid's first boot..."
+  pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x apply-spoof.sh && ./apply-spoof.sh"
+  # waydroid-session isn't running yet on a fresh deployment, but might be
+  # on a re-run against an existing container - stop it first (harmless if
+  # already stopped) so the container restart below is what actually
+  # applies the new waydroid_base.prop, not a no-op on an active session.
+  pct exec "${CTID}" -- systemctl stop waydroid-session >/dev/null 2>&1 || true
+  pct exec "${CTID}" -- systemctl restart waydroid-container
+else
+  echo "    -> --skip-spoof: spoof-device.sh downloaded but not applied (see 4-waydroid-tools/apply-spoof.sh)."
+fi
+
 echo "==> [5/5] Starting the Waydroid session"
 pct exec "${CTID}" -- systemctl enable --now waydroid-session.service
 
@@ -197,12 +223,19 @@ else
      then open http://127.0.0.1:6080/vnc.html"
 fi
 
+if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
+  SPOOF_MSG="Applied (About Phone should show Pixel 5) - roll back with apply-spoof.sh --rollback"
+else
+  SPOOF_MSG="Skipped (--skip-spoof) - apply with 4-waydroid-tools/apply-spoof.sh"
+fi
+
 cat <<EOF
 
 ============================================================
  Deployment complete.
    CTID           : ${CTID}
    ${ACCESS_MSG}
+   Device spoofing: ${SPOOF_MSG}
    Directory      : ${REMOTE_DIR} (inside the container)
 
  See the "Security" section of the README (privileged container,

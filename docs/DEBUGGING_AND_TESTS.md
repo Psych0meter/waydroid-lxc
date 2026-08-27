@@ -223,6 +223,11 @@ Store download paths ("Can't create file" errors in logcat rather than
 
 ## Phase 4: Test Device Spoofing
 
+`0-deploy-all.sh` applies this automatically by default (before Waydroid's
+first boot, via `apply-spoof.sh` - pass `--skip-spoof` to opt out). This
+phase is for verifying it took effect, or for re-applying/rolling it back
+by hand afterwards.
+
 `spoof-device.sh` (Quackdoc/waydroid-scripts) applies a single fixed
 Pixel 5 profile - there is no menu or profile choice, despite what older
 instructions may say. It works by **appending** `ro.product.*`/

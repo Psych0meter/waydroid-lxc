@@ -20,7 +20,11 @@ This script:
 3. Injects the binder/apparmor/cgroup configuration into
    `/etc/pve/lxc/<CTID>.conf` and restarts the container.
 4. Copies this repo into the container and runs, in order, the Waydroid
-   install, the systemd services, then the spoofing/GPS tools.
+   install, the systemd services, then the spoofing/GPS tools -
+   automatically **applying** the Pixel 5 device spoof and restarting the
+   container before Waydroid's first boot, so About Phone already shows
+   Pixel 5 the first time you open it. Pass `--skip-spoof` to leave
+   `spoof-device.sh` downloaded but unapplied.
 5. Enables `waydroid-session.service` (auto-start on boot).
 
 By default, **noVNC is only reachable via an SSH tunnel** (see "Security"
@@ -50,8 +54,11 @@ the targeted commands).
 4. Inside the container: `2-lxc-setup/01-install-waydroid.sh`
 5. Then: `EXPOSE_LAN=no 3-services/02-install-services.sh`
 6. Then: `4-waydroid-tools/03-setup-tools.sh`
-7. `systemctl start waydroid-session`
-8. Access: see the message printed at the end of installation, or the
+7. Optional, to spoof the device as a Pixel 5 before first boot (skip this
+   step if you'd rather leave it stock, or review `spoof-device.sh` first):
+   `4-waydroid-tools/apply-spoof.sh`
+8. `systemctl start waydroid-session`
+9. Access: see the message printed at the end of installation, or the
    "Accessing the interface" section below.
 
 ## Accessing the interface
@@ -136,16 +143,19 @@ rebuilding a kernel module:
   them to `127.0.0.1` and recommends an SSH tunnel. The `--expose-lan` /
   `EXPOSE_LAN=yes` flag lifts that restriction but **adds no
   authentication** - only use it on a trusted local network.
-* **Unsigned third-party tool** (`4-waydroid-tools/03-setup-tools.sh`):
+* **Unsigned third-party tool, applied automatically**
+  (`4-waydroid-tools/03-setup-tools.sh` + `apply-spoof.sh`):
   `spoof-device.sh` is downloaded from an individual GitHub repo (`main`
-  by default). Set `SPOOF_REF` to pin a specific commit, and review its
-  content first if your threat model requires it. Apply it via
-  `4-waydroid-tools/apply-spoof.sh` rather than running it directly - the
-  wrapper snapshots the pre-spoof configuration and makes re-applying it
-  idempotent, and can roll the change back (see
-  `docs/DEBUGGING_AND_TESTS.md`, Phase 4). GPS spoofing
-  (`change-location.sh`) uses Waydroid's own `persist.waydroid.fake_gps`
-  property directly and needs no download.
+  by default) and, by default, **run automatically** by `0-deploy-all.sh`
+  before Waydroid's first boot. Set `SPOOF_REF` to pin a specific commit,
+  and review `spoof-device.sh`'s content first if your threat model
+  requires it - pass `--skip-spoof` to download it without running it.
+  Either way, apply/re-apply it via `4-waydroid-tools/apply-spoof.sh`
+  rather than running `spoof-device.sh` directly - the wrapper snapshots
+  the pre-spoof configuration and makes re-applying it idempotent, and can
+  roll the change back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4). GPS
+  spoofing (`change-location.sh`) uses Waydroid's own
+  `persist.waydroid.fake_gps` property directly and needs no download.
 * **`curl | bash`** for the official Waydroid installer (`repo.waydro.id`,
   in `01-install-waydroid.sh`): standard practice in the Waydroid ecosystem,
   but still a supply-chain risk worth knowing about.
