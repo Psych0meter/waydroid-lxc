@@ -15,6 +15,8 @@
 #   WEBAPP_PORT        TCP port (default 8088).
 #   WAYDROID_TOOLS_DIR Where change-location.sh lives (default matches a
 #                      standard 0-deploy-all.sh deployment).
+#   WEBAPP_DATA_DIR    Where favorites.json is stored (default
+#                      /var/lib/waydroid-webapp).
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
@@ -30,6 +32,7 @@ LEAFLET_VERSION="${LEAFLET_VERSION:-1.9.4}"
 VENDOR_DIR="${SCRIPT_DIR}/static/vendor/leaflet"
 WAYDROID_TOOLS_DIR="${WAYDROID_TOOLS_DIR:-/opt/waydroid-lxc-deploy/4-waydroid-tools}"
 WEBAPP_PORT="${WEBAPP_PORT:-8088}"
+WEBAPP_DATA_DIR="${WEBAPP_DATA_DIR:-/var/lib/waydroid-webapp}"
 
 echo "Installing Python prerequisites..."
 apt-get update
@@ -70,12 +73,17 @@ else
   WEBAPP_HOST="127.0.0.1"
 fi
 
+echo "Creating data directory ${WEBAPP_DATA_DIR} (favorites.json)..."
+mkdir -p "${WEBAPP_DATA_DIR}"
+chmod 700 "${WEBAPP_DATA_DIR}"
+
 echo "Writing ${ENV_FILE} (WEBAPP_HOST=${WEBAPP_HOST}, WEBAPP_PORT=${WEBAPP_PORT})..."
 mkdir -p "${CONF_DIR}"
 cat > "${ENV_FILE}" <<EOF
 WEBAPP_HOST=${WEBAPP_HOST}
 WEBAPP_PORT=${WEBAPP_PORT}
 WAYDROID_TOOLS_DIR=${WAYDROID_TOOLS_DIR}
+WEBAPP_DATA_DIR=${WEBAPP_DATA_DIR}
 EOF
 
 echo "Installing systemd service..."

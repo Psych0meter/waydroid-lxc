@@ -2,14 +2,16 @@
 Minimal API-key auth for the /api/* routes.
 
 This app can execute real Android actions (currently GPS, potentially
-more later - see actions/), so unlike a read-only status page it
-shouldn't be reachable by anyone who can merely route a packet to it.
-Rather than a full user/session system, every write action requires a
-per-deployment random token, generated on first run and stored on disk
-(mode 600) - the same "one bearer secret, no accounts" trade-off already
-used elsewhere in this repo's spirit of documented, minimal-friction
-security (see README "Security"). The token is printed by
-install-webapp.sh and readable afterwards at TOKEN_FILE.
+more later - see actions/) and store data worth keeping private (saved
+favorite locations can be real addresses), so unlike a read-only status
+page it shouldn't be reachable by anyone who can merely route a packet
+to it. Rather than a full user/session system, every route that mutates
+device state or could expose something private requires a per-deployment
+random token, generated on first run and stored on disk (mode 600) - the
+same "one bearer secret, no accounts" trade-off already used elsewhere
+in this repo's spirit of documented, minimal-friction security (see
+README "Security"). The token is printed by install-webapp.sh and
+readable afterwards at TOKEN_FILE.
 """
 from __future__ import annotations
 

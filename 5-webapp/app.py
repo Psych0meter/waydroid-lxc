@@ -20,11 +20,13 @@ from flask import Flask, jsonify, render_template
 def create_app() -> Flask:
     app = Flask(__name__)
 
+    from routes.favorites import favorites_bp
     from routes.geocode import geocode_bp
     from routes.gps import gps_bp
 
     app.register_blueprint(gps_bp, url_prefix="/api/gps")
     app.register_blueprint(geocode_bp, url_prefix="/api/geocode")
+    app.register_blueprint(favorites_bp, url_prefix="/api/favorites")
 
     @app.get("/")
     def index():

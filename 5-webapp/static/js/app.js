@@ -24,15 +24,14 @@
     statusEl.className = kind || "";
   }
 
-  async function apiPost(path, body) {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": getApiKey(),
-      },
-      body: JSON.stringify(body || {}),
-    });
+  async function apiRequest(method, path, body) {
+    const headers = { "X-API-Key": getApiKey() };
+    const options = { method, headers };
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetch(path, options);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) {
       const message = payload.message || `Request failed (${response.status})`;
@@ -42,6 +41,10 @@
       throw new Error(message);
     }
     return payload;
+  }
+
+  function apiPost(path, body) {
+    return apiRequest("POST", path, body || {});
   }
 
   // --- Map -------------------------------------------------------------
@@ -135,6 +138,112 @@
     }
   });
 
+  // --- Favorites -----------------------------------------------------
+  let allFavorites = [];
+  const favoritesListEl = document.getElementById("favorites-list");
+  const favoriteSearchInput = document.getElementById("favorite-search");
+  const favoriteNameInput = document.getElementById("favorite-name");
+
+  function renderFavorites() {
+    const filter = favoriteSearchInput.value.trim().toLowerCase();
+    const filtered = filter
+      ? allFavorites.filter((fav) => fav.name.toLowerCase().includes(filter))
+      : allFavorites;
+
+    favoritesListEl.innerHTML = "";
+    if (filtered.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent =
+        allFavorites.length === 0 ? "No favorites saved yet." : "No favorites match.";
+      favoritesListEl.appendChild(li);
+      return;
+    }
+
+    for (const fav of filtered) {
+      const li = document.createElement("li");
+
+      const applyBtn = document.createElement("button");
+      applyBtn.type = "button";
+      applyBtn.className = "favorite-apply";
+      applyBtn.textContent = fav.name;
+      applyBtn.title = `${fav.latitude.toFixed(4)}, ${fav.longitude.toFixed(4)}`;
+      applyBtn.addEventListener("click", () => applyFavorite(fav.id));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "favorite-delete";
+      deleteBtn.textContent = "×";
+      deleteBtn.title = `Delete "${fav.name}"`;
+      deleteBtn.addEventListener("click", () => deleteFavorite(fav.id));
+
+      li.appendChild(applyBtn);
+      li.appendChild(deleteBtn);
+      favoritesListEl.appendChild(li);
+    }
+  }
+
+  async function loadFavorites() {
+    try {
+      const result = await apiRequest("GET", "/api/favorites/list");
+      allFavorites = result.data.favorites;
+      renderFavorites();
+    } catch (err) {
+      // Non-fatal: leave whatever was already rendered rather than
+      // blocking the rest of the page over a failed favorites fetch.
+      setStatus(err.message, "error");
+    }
+  }
+
+  async function applyFavorite(id) {
+    setStatus("Applying favorite...", "");
+    try {
+      const result = await apiPost(`/api/favorites/${id}/apply`);
+      const fav = result.data.favorite;
+      fillCoords(fav.latitude, fav.longitude);
+      altInput.value = fav.altitude;
+      placeMarker(fav.latitude, fav.longitude, true);
+      setStatus(result.message, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  }
+
+  async function deleteFavorite(id) {
+    try {
+      await apiRequest("DELETE", `/api/favorites/${id}`);
+      await loadFavorites();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  }
+
+  favoriteSearchInput.addEventListener("input", renderFavorites);
+
+  document.getElementById("save-favorite-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = favoriteNameInput.value.trim();
+    if (!name) {
+      setStatus("Enter a name before saving a favorite.", "error");
+      return;
+    }
+    const latitude = parseFloat(latInput.value);
+    const longitude = parseFloat(lngInput.value);
+    const altitude = altInput.value.trim() === "" ? 35.0 : parseFloat(altInput.value);
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      setStatus("Set coordinates (click the map or search an address) before saving.", "error");
+      return;
+    }
+    try {
+      const result = await apiPost("/api/favorites/save", { name, latitude, longitude, altitude });
+      favoriteNameInput.value = "";
+      await loadFavorites();
+      setStatus(result.message, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+
   // --- API key dialog ------------------------------------------------
   document.getElementById("api-key-btn").addEventListener("click", () => {
     apiKeyInput.value = getApiKey();
@@ -146,10 +255,13 @@
   apiKeyDialog.addEventListener("close", () => {
     if (apiKeyDialog.returnValue !== "cancel") {
       setApiKey(apiKeyInput.value.trim());
+      loadFavorites();
     }
   });
 
   if (!getApiKey()) {
     setStatus('No API key set yet - click "API key" above before setting a location.', "");
+  } else {
+    loadFavorites();
   }
 })();

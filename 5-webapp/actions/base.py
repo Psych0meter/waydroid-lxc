@@ -30,6 +30,26 @@ class ActionResult:
         return {"ok": self.ok, "message": self.message, "data": self.data}
 
 
+def validate_number(value: object, name: str, lo: float, hi: float) -> float:
+    """
+    Parses `value` as a float and checks it falls within [lo, hi],
+    raising ActionError with a message safe to return straight to a
+    client on any failure. Shared by any action that takes numeric
+    input (actions/gps.py's coordinates, actions/favorites.py's saved
+    coordinates) so the same validation rules apply everywhere a
+    latitude/longitude/altitude is accepted.
+    """
+    if isinstance(value, bool) or value is None:
+        raise ActionError(f"{name} is required and must be a number.")
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ActionError(f"{name} must be a number, got: {value!r}") from None
+    if not (lo <= parsed <= hi):
+        raise ActionError(f"{name} must be between {lo} and {hi}, got: {parsed}")
+    return parsed
+
+
 def run_script(args: Sequence[str], timeout: int = 30) -> subprocess.CompletedProcess:
     """
     Runs a 4-waydroid-tools/ script as a subprocess.

@@ -118,3 +118,65 @@ dialog {
 dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 
 dialog form { gap: 0.6rem; }
+
+#favorites-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+#favorites-panel h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 600;
+}
+
+#favorites-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+#favorites-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+#favorites-list li.empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.3rem 0;
+}
+
+.favorite-apply {
+  flex: 1;
+  text-align: left;
+  background: #0d1117;
+  border-color: var(--border);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.favorite-apply:hover { border-color: var(--accent); }
+
+.favorite-delete {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  padding: 0.5rem 0.7rem;
+  line-height: 1;
+}
+
+.favorite-delete:hover { color: var(--danger); border-color: var(--danger); }

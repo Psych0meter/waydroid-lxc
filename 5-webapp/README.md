@@ -27,6 +27,7 @@ Environment variables (all optional, all re-runnable):
 | `WEBAPP_EXPOSE_LAN`    | preserves current setting, else `no`         | `yes` binds `0.0.0.0` instead of `127.0.0.1` |
 | `WEBAPP_PORT`          | `8088`                                       | TCP port |
 | `WAYDROID_TOOLS_DIR`   | `/opt/waydroid-lxc-deploy/4-waydroid-tools`  | where `change-location.sh` lives |
+| `WEBAPP_DATA_DIR`      | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
 | `LEAFLET_VERSION`      | `1.9.4`                                      | pinned Leaflet release to vendor |
 
 ## Using it
@@ -35,7 +36,10 @@ Open the UI (see the URL `install-webapp.sh` prints), click "API key" and
 paste in the key it printed (also readable afterwards at
 `/etc/waydroid-webapp/api-token` on the container), then either click a
 point on the map, drag the marker, or search an address - "Set location"
-calls `change-location.sh` with the resulting coordinates.
+calls `change-location.sh` with the resulting coordinates. "Save
+favorite" saves whatever's currently in the coordinate fields under a
+name of your choice; the favorites list below it filters as you type and
+each entry re-applies its saved location with one click.
 
 Or drive the API directly:
 
@@ -52,6 +56,17 @@ curl -X POST http://127.0.0.1:8088/api/gps/stop -H "X-API-Key: <token>"
 curl -X POST http://127.0.0.1:8088/api/geocode/search \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
   -d '{"address": "Eiffel Tower, Paris"}'
+
+# Favorites: save, list (optionally filtered), apply, delete
+curl -X POST http://127.0.0.1:8088/api/favorites/save \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"name": "Eiffel Tower", "latitude": 48.8584, "longitude": 2.2945}'
+
+curl "http://127.0.0.1:8088/api/favorites/list?q=eiffel" -H "X-API-Key: <token>"
+
+curl -X POST http://127.0.0.1:8088/api/favorites/<id>/apply -H "X-API-Key: <token>"
+
+curl -X DELETE http://127.0.0.1:8088/api/favorites/<id> -H "X-API-Key: <token>"
 ```
 
 Every response is JSON: `{"ok": true, "message": "...", "data": {...}}`
@@ -64,12 +79,14 @@ validation or execution failure.
 app.py            Flask app factory; registers one blueprint per action domain.
 auth.py           API-key generation/check, shared by every mutating route.
 actions/
-  base.py         ActionResult / ActionError / run_script() - shared by every action.
+  base.py         ActionResult / ActionError / run_script() / validate_number() - shared by every action.
   gps.py          Wraps 4-waydroid-tools/change-location.sh.
   geocode.py      Wraps OpenStreetMap Nominatim (address -> coordinates).
+  favorites.py    Named saved locations (JSON file store); "apply" calls actions/gps.py's set_location().
 routes/
   gps.py          Blueprint: HTTP glue for actions/gps.py.
   geocode.py      Blueprint: HTTP glue for actions/geocode.py.
+  favorites.py    Blueprint: HTTP glue for actions/favorites.py.
 templates/, static/  Leaflet-based single-page UI (vendored Leaflet, no CDN).
 ```
 
@@ -103,17 +120,35 @@ Say you want to add "launch an app" later:
 No existing file's logic needs to change - `auth.py`, `actions/base.py`
 and the rest of the routing stay exactly as they are.
 
+`actions/favorites.py` is a real (not hypothetical) example of this same
+pattern, with one addition worth knowing about: an action can call
+another action directly - `apply_favorite()` just calls
+`actions.gps.set_location()` with the favorite's saved coordinates
+rather than reimplementing anything. Reach for that whenever a new
+action is really "do an existing action, with different inputs" (a
+scheduled/recurring version of an existing action, a batch variant,
+etc.) instead of duplicating logic.
+
 ## Security
 
 Same "documented trade-off, LAN-only trust boundary" posture as the rest
 of this repo (see the top-level README's "Security" section):
 
-* **API-key auth, not a full account system**: every `/api/*` POST route
-  requires a random per-deployment token (`X-API-Key` header or
-  `?api_key=` query param), generated on first run and stored at
-  `/etc/waydroid-webapp/api-token` (mode 600). There's no rate limiting
-  or key rotation - treat the key like a password, and regenerate it by
-  deleting that file and restarting the service if it leaks.
+* **API-key auth, not a full account system**: every `/api/*` route that
+  mutates device state OR could expose something private (this now
+  includes `GET /api/favorites/list` - a saved "Home"/"Work" favorite is
+  a real address) requires a random per-deployment token (`X-API-Key`
+  header or `?api_key=` query param), generated on first run and stored
+  at `/etc/waydroid-webapp/api-token` (mode 600). There's no rate
+  limiting or key rotation - treat the key like a password, and
+  regenerate it by deleting that file and restarting the service if it
+  leaks.
+* **Favorites are stored in plain JSON**, unencrypted, at
+  `/var/lib/waydroid-webapp/favorites.json` (mode 700 directory) -
+  anyone with root on the container (or a backup of it) can read saved
+  names/coordinates regardless of the API key. Fine for a personal
+  convenience list; don't save anything there you wouldn't want visible
+  to anyone who can already `pct exec` into this container.
 * **The `/` page itself has no login** - it's just static HTML/JS; every
   action it triggers still goes through the API-key-gated endpoints, so
   loading the page alone can't control the device.

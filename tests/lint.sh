@@ -79,8 +79,8 @@ if [[ ! -f "2-lxc-setup/sway-headless-config" ]]; then
   FAIL=1
 fi
 for ref in requirements.txt waydroid-webapp.service app.py auth.py \
-           actions/base.py actions/gps.py actions/geocode.py \
-           routes/gps.py routes/geocode.py templates/index.html; do
+           actions/base.py actions/gps.py actions/geocode.py actions/favorites.py \
+           routes/gps.py routes/geocode.py routes/favorites.py templates/index.html; do
   if [[ ! -f "5-webapp/${ref}" ]]; then
     echo "MISSING FILE referenced by install-webapp.sh/app.py: 5-webapp/${ref}"
     FAIL=1
@@ -100,6 +100,16 @@ if command -v python3 >/dev/null 2>&1; then
   echo "OK"
 else
   echo "python3 not available, skipping this step."
+fi
+
+echo ""
+echo "== Python unit tests (5-webapp) =="
+if python3 -c "import flask, requests" >/dev/null 2>&1; then
+  if ! python3 -m unittest discover -s 5-webapp/tests -t 5-webapp -v; then
+    FAIL=1
+  fi
+else
+  echo "flask/requests not importable, skipping (pip install -r 5-webapp/requirements.txt to run this step)."
 fi
 
 echo ""

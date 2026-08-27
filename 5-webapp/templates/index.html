@@ -45,6 +45,19 @@
       </form>
 
       <div id="status" role="status"></div>
+
+      <section id="favorites-panel">
+        <h2>Favorites</h2>
+        <input type="text" id="favorite-search" placeholder="Filter favorites...">
+        <ul id="favorites-list"></ul>
+        <form id="save-favorite-form">
+          <div class="row">
+            <input type="text" id="favorite-name" placeholder="Name this location" maxlength="100">
+            <button type="submit">Save favorite</button>
+          </div>
+          <p class="hint">Saves whatever is currently in Latitude/Longitude/Altitude above.</p>
+        </form>
+      </section>
     </section>
   </main>
 

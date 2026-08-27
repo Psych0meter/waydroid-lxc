@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from .base import ActionError, ActionResult, run_script
+from .base import ActionError, ActionResult, run_script, validate_number
 
 # Sourced from webapp.env by the systemd unit (see install-webapp.sh);
 # defaults match a standard 0-deploy-all.sh deployment for running the
@@ -23,18 +23,6 @@ CHANGE_LOCATION_SCRIPT = os.path.join(TOOLS_DIR, "change-location.sh")
 _SCRIPT_TIMEOUT = 30  # change-location.sh does one 'adb shell' call and returns
 
 
-def _validate_number(value: object, name: str, lo: float, hi: float) -> float:
-    if isinstance(value, bool) or value is None:
-        raise ActionError(f"{name} is required and must be a number.")
-    try:
-        parsed = float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        raise ActionError(f"{name} must be a number, got: {value!r}") from None
-    if not (lo <= parsed <= hi):
-        raise ActionError(f"{name} must be between {lo} and {hi}, got: {parsed}")
-    return parsed
-
-
 def set_location(
     latitude: object, longitude: object, altitude: object = 35.0
 ) -> ActionResult:
@@ -43,9 +31,9 @@ def set_location(
     change-location.sh itself fails (e.g. the mock-location app isn't
     installed yet - run setup-gps.sh first).
     """
-    lat = _validate_number(latitude, "latitude", -90.0, 90.0)
-    lng = _validate_number(longitude, "longitude", -180.0, 180.0)
-    alt = _validate_number(altitude, "altitude", -1000.0, 100_000.0)
+    lat = validate_number(latitude, "latitude", -90.0, 90.0)
+    lng = validate_number(longitude, "longitude", -180.0, 180.0)
+    alt = validate_number(altitude, "altitude", -1000.0, 100_000.0)
 
     result = run_script(
         [CHANGE_LOCATION_SCRIPT, str(lat), str(lng), str(alt)],
