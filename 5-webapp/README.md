@@ -129,7 +129,9 @@ even with a completely broken screenshot and no need to navigate to the
 PIN pad yourself first - it wakes the device if needed, swipes past the
 lock screen's clock/notification curtain, then types the PIN via the
 same digit-KeyEvent mechanism as typing directly into the Screen panel
-(see "Screen: remote control", below). Each button greys itself out
+(see "Screen: remote control", below) - and reports an error in the
+status line below if the device is still locked afterward, the closest
+thing to a "wrong PIN" message adb allows for. Each button greys itself out
 when it's already the current state (Lock once locked, Unlock once
 unlocked), tracking the same indicator. "Set PIN" runs `locksettings
 set-pin` for you - the same thing as running it by hand over adb - to
@@ -365,7 +367,11 @@ goes through the same API-key-gated routes as everything else.
   the PIN as digit KeyEvents + `enter` - the same blind-entry mechanism
   as typing into the Screen panel, wrapped into one call that gets you
   from locked (in whatever state that looks like) to unlocked without
-  ever needing to see the screen yourself first.
+  ever needing to see the screen yourself first. Re-checks `lock-status`
+  afterward and returns an error if the device is still locked - adb has
+  no direct "wrong PIN" signal to read, so still being locked a beat
+  after a correct-length PIN was entered is the best available proxy
+  for "that PIN was wrong."
 * `POST /api/screen/set-pin` takes `{"pin": "...", "old_pin": "..."}`
   (`old_pin` optional) and runs `adb shell locksettings set-pin [--old
   <old_pin>] <pin>` - the same command that works by hand. `locksettings`
@@ -502,3 +508,9 @@ of this repo (see the top-level README's "Security" section):
   force-stop system components (Settings, SystemUI, etc.), but anything
   you've installed for testing is fair game, including whatever you were
   in the middle of using.
+* **`POST /api/screen/set-pin` and `/unlock` set and enter the device's
+  actual lock-screen PIN** through the same single API key as everything
+  else - anyone with it can both read and change what's standing between
+  the device and whoever picks it up next. No separate secret or
+  confirmation step beyond the API key itself; "treat the key like a
+  password" applies here more than almost anywhere else in this API.

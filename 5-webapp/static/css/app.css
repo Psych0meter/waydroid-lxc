@@ -310,10 +310,6 @@ dialog form { gap: 0.6rem; }
 
 #screen-controls { display: flex; flex-direction: column; gap: 0.5rem; }
 #screen-controls .row button { flex: 1; }
-/* screen-lock-panel's own direct children (the status hint, the unlock
-   row, the set-pin form) otherwise stack with no consistent spacing of
-   their own - same 0.5rem as the horizontal gap between buttons/fields
-   in a .row, and the same vertical gap #screen-controls uses between
-   its own rows/forms, so the lock controls read as part of the same
-   layout rather than bolted on. */
+/* Same 0.5rem gap as #screen-controls above, so its own children (hint,
+   unlock row, set-pin form) don't stack with no spacing of their own. */
 #screen-lock-panel { display: flex; flex-direction: column; gap: 0.5rem; }

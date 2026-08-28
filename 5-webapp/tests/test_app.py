@@ -575,9 +575,19 @@ class ScreenTest(WebappTestCase):
         self.assertIn("doesn't match", resp.get_json()["message"])
 
     def _mock_lock_and_power(self, device, locked, awake=True):
+        """
+        `locked` is either a bool (constant lock state for every
+        'dumpsys window' call) or a list/tuple of bools consumed one per
+        call, in order - needed for unlock_with_pin()'s pre- and
+        post-entry checks, which call _is_locked() twice. The last
+        element repeats once the list is exhausted.
+        """
+        states = list(locked) if isinstance(locked, (list, tuple)) else [locked]
+
         def fake_shell(cmdargs):
             if cmdargs == ["dumpsys", "window"]:
-                return "mShowingLockscreen=true" if locked else "mShowingLockscreen=false"
+                is_locked = states.pop(0) if len(states) > 1 else states[0]
+                return "mShowingLockscreen=true" if is_locked else "mShowingLockscreen=false"
             if cmdargs == ["dumpsys", "power"]:
                 return "mWakefulness=Awake" if awake else "mWakefulness=Asleep"
             return ""
@@ -585,12 +595,15 @@ class ScreenTest(WebappTestCase):
         device.shell.side_effect = fake_shell
 
     def test_unlock_enters_pin_via_keyevents_when_locked(self):
+        # locked, then unlocked on the post-entry re-check - a correct
+        # PIN dismissing the keyguard.
         device = self._mock_device(width=1080, height=1920)
-        self._mock_lock_and_power(device, locked=True, awake=True)
+        self._mock_lock_and_power(device, locked=[True, False], awake=True)
         with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]), \
              mock.patch.object(screen_module.time, "sleep"):
             resp = self.post("/api/screen/unlock", {"pin": "1234"})
         self.assertEqual(resp.status_code, 200)
+        self.assertIn("Unlocked", resp.get_json()["message"])
         # 1 2 3 4 -> KEYCODE_1..4 (8, 9, 10, 11), then KEYCODE_ENTER (66) -
         # real key events, not text injection (see send_text's docstring).
         device.keyevent.assert_has_calls(
@@ -603,7 +616,7 @@ class ScreenTest(WebappTestCase):
 
     def test_unlock_wakes_the_device_first_if_asleep(self):
         device = self._mock_device()
-        self._mock_lock_and_power(device, locked=True, awake=False)
+        self._mock_lock_and_power(device, locked=[True, False], awake=False)
         with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]), \
              mock.patch.object(screen_module.time, "sleep"):
             resp = self.post("/api/screen/unlock", {"pin": "12"})
@@ -612,6 +625,22 @@ class ScreenTest(WebappTestCase):
             [mock.call(26), mock.call(8), mock.call(9), mock.call(66)]
         )
         device.swipe.assert_called_once()
+
+    def test_unlock_reports_an_error_when_still_locked_after_entering_pin(self):
+        # No direct "wrong PIN" signal over adb - still locked a beat
+        # after entering it is the best available proxy, and the one
+        # thing the frontend can show the user as a clear error instead
+        # of silently reporting success.
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=[True, True])
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]), \
+             mock.patch.object(screen_module.time, "sleep"):
+            resp = self.post("/api/screen/unlock", {"pin": "0000"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("still locked", resp.get_json()["message"].lower())
+        # The attempt itself still happened - it's only the outcome that
+        # was checked and found wanting.
+        device.keyevent.assert_has_calls([mock.call(7), mock.call(7), mock.call(7), mock.call(7), mock.call(66)])
 
     def test_unlock_does_nothing_when_already_unlocked(self):
         # Sending digit keyevents blind when nothing needs them would just

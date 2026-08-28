@@ -578,29 +578,16 @@ recovery:
   device locks (manually or after idling), is a different, more
   restrictive surface - Back and Home are consumed by the keyguard
   itself and won't get you off it. This is the one that can leave you
-  unable to see *or* dismiss anything. Since v1.0, the Screen panel has
-  a dedicated "Unlock" field for this: it wakes the device if asleep,
-  swipes up (aimed via `window_size()`/`wm size`, unaffected by
-  `FLAG_SECURE`, so no screenshot is needed) to dismiss the lock
-  screen's clock/notification curtain and reach the actual PIN pad,
-  then enters the PIN via digit KeyEvents (`AdbDevice.keyevent()`, not
-  text injection) and `enter` - reaching the keyguard's PIN pad with a
-  completely broken screenshot and no need to get there yourself first,
-  the same as `POST /api/screen/unlock {"pin": "..."}` directly. (Typing
-  on the keyboard with the screen image focused still works too, but
-  skips the wake/swipe steps - it's meant for a PIN pad already on
-  screen, e.g. right after "Set PIN".) A "Device is locked" overlay
-  appears directly over the (frozen/blank) screen image whenever this
-  is the state, specifically so this failure mode doesn't read as a
-  broken screenshot - and disappears once `lock-status` confirms
-  you're unlocked. The "Lock: locked/unlocked" indicator (`GET
-  /api/screen/lock-status`) driving both that overlay and the
-  Lock/Unlock buttons' greyed-out state is a best-effort read of
-  `dumpsys window`, not authoritative across every Android/Waydroid
-  build - if it's ever wrong, trust what actually happens on unlock
-  over what it says.
-  If the webapp itself isn't reachable (down, mid-redeploy, ...), the
-  equivalent directly over adb is:
+  unable to see *or* dismiss anything. The Screen panel's "Unlock" field
+  (or `POST /api/screen/unlock {"pin": "..."}` directly) handles this
+  blind, with no need to reach the PIN pad yourself first - see "Screen:
+  remote control" in `5-webapp/README.md` for exactly how it gets there
+  (wake, dismiss the lock curtain, type the PIN, confirm it actually
+  unlocked). A "Device is locked" overlay appears directly over the
+  screen image whenever `GET /api/screen/lock-status` says so, so this
+  failure mode reads as "enter your PIN below" rather than a broken
+  screenshot. If the webapp itself isn't reachable (down, mid-redeploy,
+  ...), the equivalent directly over adb is:
   ```bash
   pct exec <CTID> -- bash -c "waydroid adb connect >/dev/null 2>&1; adb shell input text '<your-pin>'; adb shell input keyevent 66"
   ```
@@ -612,30 +599,26 @@ recovery:
 * **Kill all apps** doesn't help against either of these - it
   deliberately only ever force-stops third-party packages, never system
   components, so it can't touch Settings/the keyguard either way. It's
-  for a frozen or unresponsive *installed app* (and, since v1.0, also
-  sends `home` afterward so the dead app's window actually clears
-  instead of sitting there "killed but still open").
+  for a frozen or unresponsive *installed app*, and sends `home`
+  afterward so the dead app's window actually clears instead of sitting
+  there "killed but still open."
 * Last resort, if input also stops responding entirely:
   `pct exec <CTID> -- systemctl restart waydroid-session`, or a full
   `pct reboot <CTID>`.
 
 If you don't specifically need a device lock for what you're testing,
-the simplest fix is to just leave it at **None** (the default) - a lock
-screen actively works against remote automation (it locks you out after
-the device idles), and this is the one part of the device this tool
-can't fully see. If you do need one, the Screen panel's "Set PIN" field
-(`POST /api/screen/set-pin {"pin": "...", "old_pin": "..."}` - `old_pin`
-only needed when changing an existing PIN) sets it directly via adb,
-bypassing the broken "Choose a screen lock" UI entirely - the same
-`locksettings set-pin` command as running it by hand:
+the simplest fix is to just leave it at **None** (the default) - it
+actively works against remote automation, locking the device again
+after every idle timeout even once you've dealt with it here. If you do
+need one, the Screen panel's "Set PIN" field (`POST /api/screen/set-pin
+{"pin": "...", "old_pin": "..."}` - `old_pin` only needed when changing
+an existing PIN) sets it directly via adb, bypassing the broken "Choose
+a screen lock" UI entirely - the same `locksettings set-pin` command as
+running it by hand:
 ```bash
 pct exec <CTID> -- bash -c "waydroid adb connect >/dev/null 2>&1; adb shell locksettings set-pin <your-pin>"
 ```
 Not verified against every Android/Waydroid build - confirm it actually
 takes effect before relying on it (see the "`waydroid adb` is not a
 general adb proxy" note in Phase 5 for why this is `adb shell ...`, not
-`waydroid adb shell ...`). `locksettings` reports a rejected change
-(wrong/missing `--old`, policy violation) as plain text on stdout rather
-than a nonzero exit code; `set_pin()` in `actions/screen.py` scans that
-text for failure keywords and surfaces it as-is rather than assuming
-success.
+`waydroid adb shell ...`).

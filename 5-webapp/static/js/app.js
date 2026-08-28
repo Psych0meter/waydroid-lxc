@@ -615,10 +615,7 @@
       const locked = !!(result.data && result.data.locked);
       screenLockStatusEl.textContent = "Lock: " + (locked ? "locked" : "unlocked");
       screenLockStatusEl.className = locked ? "locked" : "unlocked";
-      // Makes it obvious *why* the screen is frozen/blank - a
-      // FLAG_SECURE screencap failure looks identical to a stuck poll
-      // otherwise - and that the fix is the Unlock field, not a
-      // webapp/adb problem.
+      // See app.css's #screen-lock-overlay for why this exists.
       screenLockOverlay.classList.toggle("visible", locked);
       // Grey out whichever action is already the current state.
       screenLockBtn.disabled = locked;

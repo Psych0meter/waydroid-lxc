@@ -292,6 +292,14 @@ def unlock_with_pin(pin: object) -> ActionResult:
     lock_status() already says unlocked - sending digit keyevents (and
     swiping) blind when something else has focus (a text field, a
     game...) would just disrupt it.
+
+    Re-checks lock_status() after entering the PIN and raises
+    ActionError if the device is still locked - there's no direct
+    "wrong PIN" signal to read over adb, so this is the best available
+    proxy: a correct PIN dismisses the keyguard almost immediately,
+    so still being locked a beat later most likely means the PIN was
+    wrong (though in principle it could also mean the keyguard didn't
+    register the keyevents in time).
     """
     if not isinstance(pin, str) or not pin.isdigit():
         raise ActionError("pin must be numeric digits.")
@@ -329,7 +337,11 @@ def unlock_with_pin(pin: object) -> ActionResult:
     except adbutils.AdbError as exc:
         raise ActionError(f"Unlock failed: {exc}") from exc
 
-    return ActionResult(ok=True, message="PIN entered.", data={"locked": False})
+    time.sleep(0.5)  # a correct PIN dismisses the keyguard almost immediately
+    if _is_locked(device):
+        raise ActionError("Still locked after entering the PIN - it may be wrong.")
+
+    return ActionResult(ok=True, message="Unlocked.", data={"locked": False})
 
 
 def kill_all_apps() -> ActionResult:
