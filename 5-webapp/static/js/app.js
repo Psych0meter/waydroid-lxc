@@ -10,6 +10,7 @@
   const addressInput = document.getElementById("address");
   const apiKeyDialog = document.getElementById("api-key-dialog");
   const apiKeyInput = document.getElementById("api-key-input");
+  const apiKeyDialogMessage = document.getElementById("api-key-dialog-message");
 
   function getApiKey() {
     return window.localStorage.getItem(API_KEY_STORAGE_KEY) || "";
@@ -21,7 +22,24 @@
 
   function setStatus(message, kind) {
     statusEl.textContent = message;
-    statusEl.className = kind || "";
+    statusEl.className = "status-line " + (kind || "");
+  }
+
+  // Surfaces a missing/invalid API key as a popup rather than relying on
+  // the small inline status lines, which are easy to miss (especially
+  // with the Screen panel filling most of the viewport). Safe to call
+  // repeatedly while already open - it just updates the message in place
+  // instead of stealing focus with a second showModal().
+  function openApiKeyDialog(message, kind) {
+    if (message) {
+      apiKeyDialogMessage.textContent = message;
+      apiKeyDialogMessage.className = "status-line " + (kind || "error");
+      apiKeyDialogMessage.hidden = false;
+    } else {
+      apiKeyDialogMessage.hidden = true;
+    }
+    apiKeyInput.value = getApiKey();
+    if (!apiKeyDialog.open) apiKeyDialog.showModal();
   }
 
   async function apiRequest(method, path, body) {
@@ -36,7 +54,7 @@
     if (!response.ok || payload.ok === false) {
       const message = payload.message || `Request failed (${response.status})`;
       if (response.status === 401) {
-        setStatus("API key missing or invalid - click \"API key\" above to set it.", "error");
+        openApiKeyDialog("API key missing or invalid.");
       }
       throw new Error(message);
     }
@@ -245,11 +263,10 @@
 
   // --- API key dialog ------------------------------------------------
   document.getElementById("api-key-btn").addEventListener("click", () => {
-    apiKeyInput.value = getApiKey();
-    apiKeyDialog.showModal();
+    openApiKeyDialog();
   });
   document.getElementById("api-key-cancel").addEventListener("click", () => {
-    apiKeyDialog.close();
+    apiKeyDialog.close("cancel");
   });
   apiKeyDialog.addEventListener("close", () => {
     if (apiKeyDialog.returnValue !== "cancel") {
@@ -259,7 +276,7 @@
   });
 
   if (!getApiKey()) {
-    setStatus('No API key set yet - click "API key" above before setting a location.', "");
+    openApiKeyDialog("Set your API key to use this webapp.", "");
   } else {
     loadFavorites();
   }
@@ -359,7 +376,7 @@
 
   function setScreenStatus(message, kind) {
     screenStatusEl.textContent = message;
-    screenStatusEl.className = kind || "";
+    screenStatusEl.className = "status-line " + (kind || "");
   }
 
   // Fetched with the API key header (an <img src> can't set one) and
@@ -371,7 +388,9 @@
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.message || `Screenshot failed (${response.status})`);
+      const message = payload.message || `Screenshot failed (${response.status})`;
+      if (response.status === 401) openApiKeyDialog(message);
+      throw new Error(message);
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -404,7 +423,7 @@
   function startScreen() {
     if (screenPolling) return;
     if (!getApiKey()) {
-      setScreenStatus('No API key set yet - click "API key" above first.', "error");
+      openApiKeyDialog("Set your API key to start the screen.");
       return;
     }
     screenPolling = true;

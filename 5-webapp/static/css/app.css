@@ -107,14 +107,14 @@ button:hover { filter: brightness(1.1); }
 .row { display: flex; gap: 0.5rem; }
 .row input { flex: 1; }
 
-#status {
+.status-line {
   font-size: 0.85rem;
   min-height: 1.2em;
   white-space: pre-wrap;
 }
 
-#status.ok { color: var(--ok); }
-#status.error { color: var(--danger); }
+.status-line.ok { color: var(--ok); }
+.status-line.error { color: var(--danger); }
 
 dialog {
   border: 1px solid var(--border);
