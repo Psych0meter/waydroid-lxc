@@ -25,9 +25,10 @@ apt-get update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 echo "Installing prerequisites..."
-# sway, not weston: wayvnc needs wlroots protocols Weston doesn't implement
-# (see README, "Architecture choice").
-apt-get install -y curl ca-certificates iptables dnsmasq sway wayvnc novnc websockify python3 git wget kmod nano procps lsb-release dbus dbus-daemon dbus-bin
+# sway: the headless Wayland compositor Waydroid renders through (Android's
+# SurfaceFlinger needs *some* compositor present, even with nothing ever
+# displaying its output directly - see README, "Architecture choice").
+apt-get install -y curl ca-certificates iptables dnsmasq sway python3 git wget kmod nano procps lsb-release dbus dbus-daemon dbus-bin
 
 # dnsmasq auto-enables itself as a system service, conflicting with
 # Waydroid's own dnsmasq on the waydroid0 bridge (see

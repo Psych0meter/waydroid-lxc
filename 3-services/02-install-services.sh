@@ -1,36 +1,18 @@
 #!/usr/bin/env bash
 # Runs INSIDE the Debian 13 LXC.
 #
-# wayvnc/websockify listen on 127.0.0.1 by default (SSH tunnel access - see
-# README "Security"). To expose them on the LAN (no VNC authentication!):
-#   EXPOSE_LAN=yes ./02-install-services.sh
-# Re-running without EXPOSE_LAN set preserves whichever mode is already
-# configured (see the EXPOSE_LAN resolution below) - pass EXPOSE_LAN=no
-# explicitly to force it back to tunnel-only.
+# Installs the headless Sway compositor Waydroid renders through (required
+# - Android's SurfaceFlinger renders via Wayland/DMA-BUF, so Waydroid needs
+# *some* compositor present even though nothing ever displays its output
+# directly) and the waydroid-session auto-start unit. Screen viewing/control
+# is the webapp's job now (5-webapp/, over adb - see its README "Screen:
+# remote control"), not a service installed here - this script has no
+# network-facing component and therefore no exposure setting of its own.
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
   echo "Error: this script must be run as root inside the container." >&2
   exit 1
-fi
-
-# EXPOSE_LAN semantics:
-#  - "yes" or "no": always honored explicitly, even on a re-run - lets you
-#    deliberately toggle LAN exposure.
-#  - unset: on a fresh install there's nothing to preserve (defaults to
-#    "no", the safe default); on a re-run against an already-configured
-#    novnc.service, PRESERVES whatever is already there instead of
-#    silently reverting a previous --expose-lan. Without this, re-running
-#    this script for an unrelated reason (e.g. to pick up a fix) would
-#    silently flip an exposed deployment back to tunnel-only, since the
-#    unit file gets overwritten from the pristine template below either way.
-if [[ -z "${EXPOSE_LAN:-}" ]]; then
-  if [[ -f /etc/systemd/system/novnc.service ]] && grep -q '0\.0\.0\.0:6080' /etc/systemd/system/novnc.service; then
-    EXPOSE_LAN="yes"
-    echo "EXPOSE_LAN not specified - novnc.service is already exposed on the LAN, preserving that."
-  else
-    EXPOSE_LAN="no"
-  fi
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,46 +27,24 @@ install -m 0755 "${SCRIPT_DIR}/wait-for-wayland-socket.sh" /usr/local/bin/wait-f
 install -m 0755 "${SCRIPT_DIR}/ensure-waydroid-dbus.sh" /usr/local/bin/ensure-waydroid-dbus.sh
 install -m 0755 "${SCRIPT_DIR}/mount-emulated-storage.sh" /usr/local/bin/mount-emulated-storage.sh
 
-# wayvnc crashes without a config file, even without -C (upstream bug:
-# any1/wayvnc#10). Provide an empty one, referenced explicitly so it
-# doesn't depend on $HOME (unset for a root service without User=).
-mkdir -p /etc/wayvnc
-touch /etc/wayvnc/config
-
 echo "Installing systemd services..."
 cp "${SCRIPT_DIR}/sway.service" /etc/systemd/system/
-cp "${SCRIPT_DIR}/wayvnc.service" /etc/systemd/system/
-cp "${SCRIPT_DIR}/novnc.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/waydroid-session.service" /etc/systemd/system/
-
-if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  echo "!!! EXPOSE_LAN=yes: noVNC will listen on 0.0.0.0 WITHOUT AUTHENTICATION."
-  # Only noVNC needs the LAN listener; it reaches wayvnc over 127.0.0.1
-  # internally, so the raw VNC port (5900) stays local.
-  sed -i 's/127\.0\.0\.1:6080 127\.0\.0\.1:5900/0.0.0.0:6080 127.0.0.1:5900/' /etc/systemd/system/novnc.service
-fi
 
 echo "Reloading systemd and enabling services..."
 systemctl daemon-reload
 
-# 'enable --now' only starts a unit that isn't already running - on a
-# re-run (e.g. toggling EXPOSE_LAN on an existing deployment), a live
-# novnc.service would keep its old ExecStart despite the sed above until
-# something restarts it. 'restart' both starts a stopped unit and reloads
-# an active one, so it's used unconditionally here.
-systemctl enable sway wayvnc novnc waydroid-container.service
-systemctl restart sway wayvnc novnc waydroid-container.service
+# 'restart', not 'enable --now': on a re-run against an already-running
+# sway.service, --now alone is a no-op for units that are already active,
+# so a changed config wouldn't take effect until something else restarted
+# it - the same class of bug this repo's old EXPOSE_LAN handling hit for
+# novnc.service (see docs/DEBUGGING_AND_TESTS.md, Phase 6) before noVNC
+# was removed.
+systemctl enable sway waydroid-container.service
+systemctl restart sway waydroid-container.service
 
 # Not started here: Android's first boot can take minutes, better triggered
 # explicitly once the rest is confirmed working.
 systemctl enable waydroid-session.service
 
-echo "Services installed."
-if [[ "${EXPOSE_LAN}" == "yes" ]]; then
-  echo "noVNC reachable at http://<LXC_IP>:6080/vnc.html (NO password)"
-else
-  echo "noVNC only reachable locally. From your machine:"
-  echo "  ssh -L 6080:127.0.0.1:6080 root@<LXC_IP>"
-  echo "  then open http://127.0.0.1:6080/vnc.html"
-fi
-echo "Start Waydroid with: systemctl start waydroid-session"
+echo "Services installed. Start Waydroid with: systemctl start waydroid-session"

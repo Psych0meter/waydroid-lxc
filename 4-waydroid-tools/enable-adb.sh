@@ -6,10 +6,11 @@
 # first connection from a given host shows an "Allow USB debugging from
 # this computer?" popup that must be tapped to proceed, and until it is,
 # 'adb devices' reports the connection as "unauthorized" forever. In this
-# deployment there's no guarantee anyone is watching the noVNC session at
-# the exact moment that popup appears, so setup-gps.sh/change-location.sh
-# would otherwise be unreliable or require manual noVNC babysitting on
-# every fresh deployment. ro.adb.secure=0 is the same mechanism real
+# deployment there's no guarantee anyone is watching the screen at the
+# exact moment that popup appears, so setup-gps.sh/change-location.sh
+# (and the webapp's own adb-based screen control) would otherwise be
+# unreliable or require manual babysitting on every fresh deployment.
+# ro.adb.secure=0 is the same mechanism real
 # Android emulators use by default, for the same reason - it makes adbd
 # skip RSA authentication entirely rather than working around the popup.
 # See docs/DEBUGGING_AND_TESTS.md, Phase 5.

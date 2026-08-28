@@ -10,12 +10,7 @@
 <body>
   <header>
     <h1>Waydroid Control</h1>
-    <div id="header-actions">
-      {% if show_vnc_link %}
-      <a id="vnc-link" href="/vnc/vnc.html" target="_blank" rel="noopener">Remote screen &#8599;</a>
-      {% endif %}
-      <button id="api-key-btn" type="button" title="Set API key">API key</button>
-    </div>
+    <button id="api-key-btn" type="button" title="Set API key">API key</button>
   </header>
 
   <main>
@@ -63,6 +58,34 @@
           <p class="hint">Saves whatever is currently in Latitude/Longitude/Altitude above.</p>
         </form>
       </section>
+    </section>
+
+    <section id="screen-panel">
+      <div id="screen-header">
+        <h2>Screen</h2>
+        <button id="screen-toggle-btn" type="button">Start screen</button>
+      </div>
+      <p class="hint">
+        Tap the image to tap the device, drag to swipe. Refreshes about
+        once a second while running - not a live video feed.
+      </p>
+      <div id="screen-viewport">
+        <img id="screen-img" alt="Waydroid screen (not started)">
+      </div>
+      <div id="screen-controls">
+        <div class="row">
+          <button type="button" id="screen-key-back">Back</button>
+          <button type="button" id="screen-key-home">Home</button>
+          <button type="button" id="screen-key-recents">Recents</button>
+        </div>
+        <form id="screen-text-form">
+          <div class="row">
+            <input type="text" id="screen-text-input" placeholder="Text to type into the focused field">
+            <button type="submit">Send text</button>
+          </div>
+        </form>
+      </div>
+      <div id="screen-status" role="status"></div>
     </section>
   </main>
 

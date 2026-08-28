@@ -29,16 +29,6 @@ header {
 
 header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 
-#header-actions { display: flex; align-items: center; gap: 0.75rem; }
-
-#vnc-link {
-  color: var(--muted);
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-
-#vnc-link:hover { color: var(--accent); }
-
 main {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
@@ -190,3 +180,53 @@ dialog form { gap: 0.6rem; }
 }
 
 .favorite-delete:hover { color: var(--danger); border-color: var(--danger); }
+
+#screen-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+#screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#screen-header h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 600;
+}
+
+#screen-viewport {
+  display: flex;
+  justify-content: center;
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 120px;
+}
+
+#screen-img {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  cursor: crosshair;
+  touch-action: none;
+  display: none; /* shown once a screenshot has actually loaded */
+}
+
+#screen-img[src] { display: block; }
+
+#screen-controls { display: flex; flex-direction: column; gap: 0.5rem; }
+#screen-controls .row button { flex: 1; }

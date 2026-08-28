@@ -36,4 +36,4 @@ fi
 echo "Showing Waydroid UI..."
 waydroid show-full-ui &
 
-echo "Waydroid triggered (session PID ${SESSION_PID}). Check your noVNC web interface."
+echo "Waydroid triggered (session PID ${SESSION_PID}). Check the webapp's Screen panel, or 'waydroid screenshot'."

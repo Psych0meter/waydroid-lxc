@@ -264,4 +264,146 @@
   } else {
     loadFavorites();
   }
+
+  // --- Screen (replaces noVNC - see README "Screen: remote control")
+  const screenImg = document.getElementById("screen-img");
+  const screenToggleBtn = document.getElementById("screen-toggle-btn");
+  const screenStatusEl = document.getElementById("screen-status");
+  const screenTextForm = document.getElementById("screen-text-form");
+  const screenTextInput = document.getElementById("screen-text-input");
+
+  let screenPolling = false;
+  let screenTimer = null;
+  let screenObjectUrl = null;
+  let dragStart = null;
+
+  function setScreenStatus(message, kind) {
+    screenStatusEl.textContent = message;
+    screenStatusEl.className = kind || "";
+  }
+
+  // The image is fetched with the API key header (an <img src> can't set
+  // one) and turned into an object URL; the previous URL is revoked each
+  // time so a long polling session doesn't leak one blob per screenshot.
+  async function fetchScreenshot() {
+    const response = await fetch("/api/screen/screenshot", {
+      headers: { "X-API-Key": getApiKey() },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message || `Screenshot failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
+    screenObjectUrl = url;
+    screenImg.src = url;
+  }
+
+  async function pollScreen() {
+    if (!screenPolling) return;
+    try {
+      await fetchScreenshot();
+      setScreenStatus("", "");
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+    if (screenPolling) {
+      screenTimer = window.setTimeout(pollScreen, 1000);
+    }
+  }
+
+  function startScreen() {
+    if (screenPolling) return;
+    if (!getApiKey()) {
+      setScreenStatus('No API key set yet - click "API key" above first.', "error");
+      return;
+    }
+    screenPolling = true;
+    screenToggleBtn.textContent = "Stop screen";
+    pollScreen();
+  }
+
+  function stopScreen() {
+    screenPolling = false;
+    if (screenTimer) window.clearTimeout(screenTimer);
+    screenToggleBtn.textContent = "Start screen";
+  }
+
+  screenToggleBtn.addEventListener("click", () => {
+    if (screenPolling) stopScreen();
+    else startScreen();
+  });
+
+  // Maps a pointer event's browser-pixel position to device-pixel
+  // coordinates, using the ratio between the <img>'s actual (natural)
+  // size and however large it's currently being displayed - the two
+  // differ whenever the screenshot is scaled to fit #screen-viewport.
+  function toDeviceCoords(event) {
+    const rect = screenImg.getBoundingClientRect();
+    const scaleX = screenImg.naturalWidth / rect.width;
+    const scaleY = screenImg.naturalHeight / rect.height;
+    return {
+      x: Math.round((event.clientX - rect.left) * scaleX),
+      y: Math.round((event.clientY - rect.top) * scaleY),
+    };
+  }
+
+  screenImg.addEventListener("pointerdown", (event) => {
+    if (!screenPolling) return;
+    dragStart = toDeviceCoords(event);
+  });
+
+  screenImg.addEventListener("pointerup", async (event) => {
+    if (!screenPolling || !dragStart) return;
+    const start = dragStart;
+    dragStart = null;
+    const end = toDeviceCoords(event);
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    try {
+      if (distance < 15) {
+        await apiPost("/api/screen/tap", { x: start.x, y: start.y });
+      } else {
+        await apiPost("/api/screen/swipe", {
+          x1: start.x,
+          y1: start.y,
+          x2: end.x,
+          y2: end.y,
+          duration_ms: 300,
+        });
+      }
+      setScreenStatus("", "");
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
+
+  async function sendScreenKey(key) {
+    try {
+      await apiPost("/api/screen/key", { key });
+      setScreenStatus("", "");
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  }
+
+  document.getElementById("screen-key-back").addEventListener("click", () => sendScreenKey("back"));
+  document.getElementById("screen-key-home").addEventListener("click", () => sendScreenKey("home"));
+  document.getElementById("screen-key-recents").addEventListener("click", () => sendScreenKey("recents"));
+
+  screenTextForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = screenTextInput.value;
+    if (!text) return;
+    try {
+      await apiPost("/api/screen/text", { text });
+      screenTextInput.value = "";
+      setScreenStatus("", "");
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
 })();

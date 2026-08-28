@@ -34,7 +34,7 @@ in.
   what makes the `binder` filesystem type available for Waydroid's
   binderfs mount in the first place.
 
-## Phase 2: Verify Compositor & Display (Sway & VNC)
+## Phase 2: Verify Compositor & Display (Sway)
 **Test:** Is the headless compositor running?
 * Run inside LXC: `systemctl status sway`
 * **Expected output:** `active (running)`.
@@ -55,38 +55,22 @@ in.
     minimal container, so the bar's system tray is simply unavailable
     (`bar { mode invisible }` hides it anyway).
 
-**Test:** Is wayvnc up and listening?
-* Run inside LXC: `systemctl status wayvnc`
-* If `wayvnc.service` fails immediately after `sway.service`, check
-  `journalctl -u wayvnc -e`: its `ExecStartPre`
-  (`wait-for-wayland-socket.sh`) fails if the Wayland socket never appears -
-  in that case the problem is Sway (see above), not wayvnc.
-* **Known issue #1**: `ERROR: ../src/main.c: 2034: Failed to load config.
-  Success`, restart-looping: `wayvnc` always tries to load a config file,
-  even without `-C`, and crashes if none exists
-  ([any1/wayvnc#10](https://github.com/any1/wayvnc/issues/10)) - even more
-  likely here since `$HOME` isn't set for a systemd service launched
-  without `User=`. This repo creates an empty `/etc/wayvnc/config` in
-  `02-install-services.sh`, references it via `-C` in `wayvnc.service`, and
-  also sets `Environment=HOME=/root`. If you still see this error:
-  `mkdir -p /etc/wayvnc && touch /etc/wayvnc/config && systemctl restart wayvnc`.
-* **Known issue #2**: `invalid version for global zxdg_output_manager_v1` /
-  `Virtual Pointer protocol not supported by compositor` / `Failed to
-  initialise wayland`: means the compositor on the other end isn't
-  wlroots-based (typically if `weston` is running instead of `sway` - see
-  "Architecture choice" in the README). `wayvnc` will never work with
-  Weston, no matter the configuration. Check that `WAYLAND_DISPLAY`/
-  `XDG_RUNTIME_DIR` match between `sway.service` and `wayvnc.service`, and
-  that `sway.service` (not a leftover `weston.service`) is what's actually
-  active: `systemctl list-units '*.service' | grep -Ei 'sway|weston'`.
-
-**Test:** Is the web interface exposed?
-* Run inside LXC: `systemctl status novnc`
-* By default, noVNC/wayvnc only listen on `127.0.0.1` - see the README's
-  "Accessing the interface" section for the SSH tunnel. If you deployed with
-  `--expose-lan`/`EXPOSE_LAN=yes` and the browser can't reach
-  `http://<LXC_IP>:6080/vnc.html`, check that the Proxmox Datacenter
-  firewall allows inbound port `6080`.
+**Test:** Can the webapp reach the device to show a screen?
+* Run inside LXC: `systemctl status waydroid-webapp`, then
+  `pct exec <CTID> -- curl -s -o /dev/null -w '%{http_code}\n'
+  http://127.0.0.1:8088/api/screen/screenshot -H "X-API-Key: $(cat
+  /etc/waydroid-webapp/api-token)"` (expect `200`).
+* If the webapp is up but the Screen panel never shows an image, or this
+  curl returns a 5xx, check `journalctl -u waydroid-webapp -e` for an
+  `AdbError` - this almost always means adb can't reach the device yet
+  (Android still booting, or `adb devices` shows nothing/`unauthorized`;
+  see Phase 5's adb troubleshooting, which the webapp's `actions/screen.py`
+  hits the same way `change-location.sh` does).
+* This replaces an earlier version of this repo's `wayvnc`/`novnc`-based
+  screen sharing (see git history if you need to debug an old deployment
+  that still runs it) - the webapp now talks to the device directly over
+  adb instead of reading Sway's compositor output, so there's no separate
+  VNC service to check here anymore.
 
 ## Phase 3: Verify Waydroid Session
 **Test:** Is waydroid-container.service (provided by the waydroid package) active?
@@ -144,23 +128,23 @@ Then check inside the container: `ls -l /dev/loop*` should list
 
 **Known issue**: the `/run/user/0/wayland-1` socket (or whatever it's
 named) never appears, even though `sway.service` is `active (running)`
-with no fatal error in its logs, and `wayvnc`/`waydroid-session` keep
-timing out in `wait-for-wayland-socket.sh`: `/run/user/0` is managed by
+with no fatal error in its logs, and `waydroid-session` keeps timing out
+in `wait-for-wayland-socket.sh`: `/run/user/0` is managed by
 **systemd-logind** (`user-runtime-dir@0.service`), which **remounts it as a
 brand-new tmpfs** on every root session (dis/re)connection (typically an
 SSH session), wiping out anything a system service had created there in
 the meantime - including Sway's Wayland socket. Verify with `mount | grep
 /run/user/0` and `systemctl status user-runtime-dir@0.service`. This is why
-this repo runs the whole stack (Sway, wayvnc, waydroid-session) on a
-**dedicated** runtime directory, `/run/waydroid-wayland`, never recycled by
-logind - not `/run/user/0`. If you deployed before this fix, or copied old
-units manually, replace every occurrence of `/run/user/0` with
-`/run/waydroid-wayland` in `sway.service`, `wayvnc.service` and
-`waydroid-session.service`, then:
+this repo runs the whole stack (Sway, waydroid-session) on a **dedicated**
+runtime directory, `/run/waydroid-wayland`, never recycled by logind - not
+`/run/user/0`. If you deployed before this fix, or copied old units
+manually, replace every occurrence of `/run/user/0` with
+`/run/waydroid-wayland` in `sway.service` and `waydroid-session.service`,
+then:
 ```bash
 mkdir -p /run/waydroid-wayland && chmod 0700 /run/waydroid-wayland
 systemctl daemon-reload
-systemctl restart sway wayvnc waydroid-session
+systemctl restart sway waydroid-session
 ```
 
 **Known issue**: `gbinder ERROR: Can't get binder version from /dev/binder:
@@ -428,31 +412,26 @@ The three in-container install scripts are safe to re-run directly against
 an already-deployed container, and each guards its own expensive step:
 `01-install-waydroid.sh` skips `waydroid init` if `/var/lib/waydroid/images`
 already exists, `02-install-services.sh` always does a clean overwrite of
-its systemd units and unconditionally `restart`s them, so a re-run with a
-different `EXPOSE_LAN` actually takes effect, and `03-setup-tools.sh` just
-re-downloads `spoof-device.sh`. For an existing container, run them
+its systemd units and unconditionally `restart`s them, and `03-setup-tools.sh`
+just re-downloads `spoof-device.sh`. For an existing container, run them
 directly with `pct exec <CTID> -- ...` (see "Manual deployment" in the
 README) rather than through `0-deploy-all.sh`.
 
-**Known issue (fixed): re-running `02-install-services.sh` silently
-reverted `--expose-lan`.** `EXPOSE_LAN` used to default to `"no"` whenever
-the variable wasn't explicitly set to `"yes"` - so re-running the script
-for any unrelated reason (picking up a fix, redeploying with a newer copy
-of the repo) without re-passing `--expose-lan`/`EXPOSE_LAN=yes` silently
-regenerated `novnc.service` from the pristine tunnel-only template. Before
-the `enable --now` -> `restart` fix above, this reset didn't actually apply
-to an already-running `novnc.service`, which accidentally masked the bug;
-once `restart` was introduced, the same silent reset started taking real
-effect, breaking direct LAN access that had previously been enabled.
-`02-install-services.sh` now resolves `EXPOSE_LAN` explicitly: `"yes"` or
-`"no"` (env var, or `--expose-lan`/`--no-expose-lan` on `0-deploy-all.sh`)
-is always honored, even on a re-run; left **unset**, it inspects the
-*current* `novnc.service` on disk (if any) and preserves whatever mode is
-already configured, defaulting to `"no"` only when there's nothing to
-preserve (a fresh install). So a plain re-run with no flag now leaves
-whatever exposure setting you already had alone.
+**Historical note**: an earlier version of this repo had a `02-install-services.sh`-level
+`EXPOSE_LAN` toggle controlling `novnc.service`'s bind address, with a
+known bug where re-running the script without re-passing
+`--expose-lan`/`EXPOSE_LAN=yes` could silently revert an already-exposed
+deployment back to tunnel-only. `wayvnc`/noVNC have since been removed
+entirely (see `5-webapp/README.md`, "Screen: remote control") - the only
+exposure switch left in the whole repo is the webapp's own
+`WEBAPP_EXPOSE_LAN`, described next, which does **not** carry the old
+preserve-on-rerun behavior: `0-deploy-all.sh` always passes an explicit
+value (defaulting to `"no"`), so a plain re-run with no flag reverts to
+tunnel-only rather than preserving prior exposure. Run `install-webapp.sh`
+directly (not through `0-deploy-all.sh`) if you want the "preserve
+whatever's currently configured" behavior described below.
 
-**`0-deploy-all.sh --ctid <existing ID>` is not the same kind of safe.**
+**`0-deploy-all.sh --ctid <existing ID>` is not fully idempotent.**
 Only step 3 (LXC config injection) is actually idempotency-guarded - it
 skips re-appending if `lxc.apparmor.profile: unconfined` is already in the
 `.conf`. Step 2, the container-creation call to the third-party
@@ -461,37 +440,25 @@ on every invocation**, including with `--ctid` set to an existing container.
 That script isn't maintained by this repo, and its behavior when pointed at
 an existing CTID (update in place vs. attempt to recreate) isn't verified
 here. Don't rerun the full `0-deploy-all.sh` pipeline against a working
-container just to change a setting like `--expose-lan` - use the targeted
-commands below, or the manual per-step scripts above, instead.
+container just to change a setting like `--webapp-expose-lan` - use the
+targeted commands below, or the manual per-step scripts above, instead.
 
-**Toggling LAN exposure on an existing container**, without touching the
-container itself (this rewrites the whole `ExecStart` line, so it's
-idempotent regardless of the unit's current state):
+**Toggling LAN exposure on an existing container's webapp**, without
+touching the container itself otherwise - re-running `install-webapp.sh`
+with an explicit `WEBAPP_EXPOSE_LAN` rewrites `webapp.env` and restarts
+the service, so it's idempotent regardless of current state:
 ```bash
-# On the Proxmox host - to EXPOSE noVNC on the LAN:
-pct exec <CTID> -- sed -i 's|^ExecStart=.*|ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 0.0.0.0:6080 127.0.0.1:5900|' /etc/systemd/system/novnc.service
-pct exec <CTID> -- systemctl daemon-reload
-pct exec <CTID> -- systemctl restart novnc
+# On the Proxmox host - to EXPOSE the webapp on the LAN:
+pct exec <CTID> -- env WEBAPP_EXPOSE_LAN=yes bash -c "cd /opt/waydroid-lxc-deploy/5-webapp && ./install-webapp.sh"
 
 # To go back to SSH-tunnel-only:
-pct exec <CTID> -- sed -i 's|^ExecStart=.*|ExecStart=/usr/bin/websockify --web=/usr/share/novnc/ 127.0.0.1:6080 127.0.0.1:5900|' /etc/systemd/system/novnc.service
-pct exec <CTID> -- systemctl daemon-reload
-pct exec <CTID> -- systemctl restart novnc
+pct exec <CTID> -- env WEBAPP_EXPOSE_LAN=no bash -c "cd /opt/waydroid-lxc-deploy/5-webapp && ./install-webapp.sh"
 ```
-This is exactly what a re-run of `02-install-services.sh` with the
-matching `EXPOSE_LAN` value now does, so it's equivalent to re-running
-that one script but without going through `0-deploy-all.sh`'s
-container-creation step. To check the current state at any time:
-`pct exec <CTID> -- grep ExecStart /etc/systemd/system/novnc.service`.
-
-**None of the above has any visible effect once the webapp is installed**
-with its default `WEBAPP_UNIFY_VNC=yes` (`5-webapp/install-webapp.sh`,
-run automatically by `0-deploy-all.sh` unless `--skip-webapp` was
-passed) - it forces `novnc.service`'s `ExecStart` back to `127.0.0.1`
-every time it runs, since nginx becomes the sole external gateway for
-both. `WEBAPP_EXPOSE_LAN` / `--webapp-expose-lan` (on `install-webapp.sh`
-or `0-deploy-all.sh`) is what controls exposure in that mode - see
-`5-webapp/README.md`.
+Leaving `WEBAPP_EXPOSE_LAN` unset on a direct `install-webapp.sh` run (as
+opposed to going through `0-deploy-all.sh`, which always passes an
+explicit value) preserves whatever's already configured - see
+`5-webapp/README.md`. To check the current state at any time:
+`pct exec <CTID> -- cat /etc/waydroid-webapp/webapp.env`.
 
 **Enabling headless adb on an already-deployed container** (fixes `adb
 devices` showing `unauthorized` forever - see Phase 5): push the current

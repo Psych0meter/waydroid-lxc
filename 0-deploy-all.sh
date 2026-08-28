@@ -11,8 +11,10 @@
 # 4-waydroid-tools/enable-adb.sh), then restarting the container before
 # Waydroid's first boot, then - once the session is up - installing and
 # configuring the GPS mock-location app (pass --skip-gps-setup to leave
-# it downloaded but unconfigured) and the GPS control webapp (5-webapp/,
-# pass --skip-webapp to leave it for later).
+# it downloaded but unconfigured) and the GPS control + screen-control
+# webapp (5-webapp/, pass --skip-webapp to leave it for later - see its
+# README for why there's no separate VNC service to also install: the
+# webapp talks to the device directly over adb).
 #
 # ct/debian.sh from community-scripts is normally interactive (whiptail);
 # this wrapper pre-fills its var_* environment variables to force
@@ -35,12 +37,6 @@ CT_NET="dhcp"
 CT_CPU=4
 CT_RAM=4096
 CT_DISK=16
-# Left unset by default (not "no"): on a re-run against an existing
-# container, 02-install-services.sh preserves whatever EXPOSE_LAN mode is
-# already configured when this is unset, rather than silently reverting
-# it - see that script for details. --expose-lan / --no-expose-lan force
-# an explicit value either way.
-EXPOSE_LAN=""
 # Applies the Pixel 5 spoof automatically as part of deployment (see step
 # 4 below) - pass --skip-spoof to leave the downloaded spoof-device.sh
 # unapplied (e.g. if your threat model requires reviewing it first; see
@@ -50,13 +46,14 @@ SPOOF_DEVICE="yes"
 # session is up - pass --skip-gps-setup to leave it installed manually
 # later via 4-waydroid-tools/setup-gps.sh.
 SETUP_GPS="yes"
-# Installs the GPS control webapp (5-webapp/) automatically, behind its
-# own nginx-fronted gateway (also unifying noVNC onto that same port) -
-# pass --skip-webapp to leave it for later via 5-webapp/install-webapp.sh.
+# Installs the GPS control + screen-control webapp (5-webapp/) automatically
+# - pass --skip-webapp to leave it for later via 5-webapp/install-webapp.sh.
 INSTALL_WEBAPP="yes"
-# Unlike EXPOSE_LAN above, this defaults to a fixed "no" rather than
-# "preserve current setting" - a fresh WEBAPP_EXPOSE_LAN=no start models
-# this script's own "safe by default" posture for a from-scratch deploy.
+# This is the ONLY external-exposure switch left in this script - there's
+# no separate noVNC/wayvnc to toggle anymore (see 5-webapp/README.md,
+# "Screen: remote control"). Defaults to a fixed "no" (not "preserve
+# current setting" the way the old EXPOSE_LAN worked) - a from-scratch
+# deploy should come up tunnel-only unless asked otherwise.
 # --webapp-expose-lan / --no-webapp-expose-lan force an explicit value.
 WEBAPP_EXPOSE_LAN="no"
 
@@ -68,8 +65,6 @@ while [[ $# -gt 0 ]]; do
     --cpu) CT_CPU="$2"; shift 2 ;;
     --ram) CT_RAM="$2"; shift 2 ;;
     --disk) CT_DISK="$2"; shift 2 ;;
-    --expose-lan) EXPOSE_LAN="yes"; shift 1 ;;
-    --no-expose-lan) EXPOSE_LAN="no"; shift 1 ;;
     --skip-spoof) SPOOF_DEVICE="no"; shift 1 ;;
     --skip-gps-setup) SETUP_GPS="no"; shift 1 ;;
     --skip-webapp) INSTALL_WEBAPP="no"; shift 1 ;;
@@ -77,14 +72,8 @@ while [[ $# -gt 0 ]]; do
     --no-webapp-expose-lan) WEBAPP_EXPOSE_LAN="no"; shift 1 ;;
     -h|--help)
       echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB]"
-      echo "          [--expose-lan|--no-expose-lan] [--skip-spoof] [--skip-gps-setup]"
+      echo "          [--skip-spoof] [--skip-gps-setup]"
       echo "          [--skip-webapp] [--webapp-expose-lan|--no-webapp-expose-lan]"
-      echo ""
-      echo "  --expose-lan     Expose noVNC/wayvnc on 0.0.0.0 WITHOUT authentication (not recommended)."
-      echo "  --no-expose-lan  Force tunnel-only access (SSH tunnel, see README), even on a re-run"
-      echo "                   against a container that currently has --expose-lan applied."
-      echo "  Passing neither on a fresh container defaults to tunnel-only; re-running against an"
-      echo "  existing container without either flag PRESERVES its current exposure setting."
       echo ""
       echo "  --skip-spoof     Download spoof-device.sh (device identity spoofing) but don't run"
       echo "                   it - by default this script applies it automatically, before the"
@@ -95,16 +84,17 @@ while [[ $# -gt 0 ]]; do
       echo "                   by default this script does so automatically once the session is up."
       echo "                   Use 4-waydroid-tools/setup-gps.sh manually afterwards."
       echo ""
-      echo "  --skip-webapp         Don't install the GPS control webapp - by default this script"
-      echo "                        installs it automatically once GPS setup is done. Use"
-      echo "                        5-webapp/install-webapp.sh manually afterwards."
-      echo "  --webapp-expose-lan   Expose the webapp (and noVNC, unified behind it) on 0.0.0.0,"
-      echo "                        API-key-gated but WITHOUT authentication on the remote-screen"
-      echo "                        view (not recommended)."
+      echo "  --skip-webapp         Don't install the webapp (GPS control + screen control) - by"
+      echo "                        default this script installs it automatically once GPS setup is"
+      echo "                        done. Use 5-webapp/install-webapp.sh manually afterwards. With"
+      echo "                        no webapp installed there is no remote-screen UI at all - see"
+      echo "                        5-webapp/README.md."
+      echo "  --webapp-expose-lan   Expose the webapp on 0.0.0.0 - every action still requires its"
+      echo "                        API key, but treat the key like a password on an open network."
       echo "  --no-webapp-expose-lan  Force tunnel-only webapp access (the default)."
-      echo "  Unlike --expose-lan/--no-expose-lan above, this always defaults to tunnel-only on"
-      echo "  every run, including a re-run against an existing deployment - it does not preserve"
-      echo "  a prior --webapp-expose-lan. Pass it again explicitly if you want it to stick."
+      echo "  Unlike some older flags this repo used to have for noVNC, this always defaults to"
+      echo "  tunnel-only on every run, including a re-run against an existing deployment - it does"
+      echo "  not preserve a prior --webapp-expose-lan. Pass it again explicitly to keep it exposed."
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;
@@ -224,8 +214,8 @@ pct exec "${CTID}" -- tar -C "${REMOTE_DIR}" -xzf "${REMOTE_DIR}/payload.tar.gz"
 echo "    -> Installing Waydroid (this can take a few minutes)..."
 pct exec "${CTID}" -- bash "${REMOTE_DIR}/2-lxc-setup/01-install-waydroid.sh"
 
-echo "    -> Installing services (sway/wayvnc/novnc)..."
-pct exec "${CTID}" -- env "EXPOSE_LAN=${EXPOSE_LAN}" bash "${REMOTE_DIR}/3-services/02-install-services.sh"
+echo "    -> Installing services (Sway headless compositor + Waydroid session)..."
+pct exec "${CTID}" -- bash "${REMOTE_DIR}/3-services/02-install-services.sh"
 
 echo "    -> Fetching Waydroid tools (device spoofing/GPS)..."
 pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && bash 03-setup-tools.sh"
@@ -261,16 +251,9 @@ if [[ "${SETUP_GPS}" == "yes" ]]; then
   fi
 fi
 
-# install-webapp.sh's own default (WEBAPP_UNIFY_VNC=yes) forces
-# novnc.service to bind 127.0.0.1 permanently, regardless of whatever
-# EXPOSE_LAN set for it in step 2 above - the webapp's own gateway
-# (controlled by WEBAPP_EXPOSE_LAN, not EXPOSE_LAN) becomes the only
-# externally-reachable path to both. That's why the final access message
-# below is computed AFTER this step, from the container's actual state,
-# rather than trusting $EXPOSE_LAN.
 WEBAPP_MSG="Skipped (--skip-webapp) - install with 5-webapp/install-webapp.sh"
 if [[ "${INSTALL_WEBAPP}" == "yes" ]]; then
-  echo "    -> Installing the GPS control webapp (unifies noVNC behind the same port)..."
+  echo "    -> Installing the webapp (GPS control + adb-based screen control)..."
   if pct exec "${CTID}" -- env "WEBAPP_EXPOSE_LAN=${WEBAPP_EXPOSE_LAN}" \
        bash -c "cd '${REMOTE_DIR}/5-webapp' && chmod +x install-webapp.sh && ./install-webapp.sh"; then
     WEBAPP_MSG="Ready"
@@ -283,41 +266,28 @@ fi
 CT_IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"
 
 if [[ "${WEBAPP_MSG}" == "Ready" ]]; then
-  # The webapp's nginx gateway is now the sole externally-reachable path
-  # to both it and noVNC - read its actual listen address/port and API
-  # key back from the container rather than assuming WEBAPP_PORT=8088
-  # (only a default, and never written to webapp.env for us to re-read).
+  # Read the actual listen address/port and API key back from the
+  # container rather than assuming WEBAPP_PORT=8088 (only a default, and
+  # webapp.env is the source of truth for what install-webapp.sh actually
+  # configured, including on a re-run that preserved a prior exposure).
   WEBAPP_TOKEN="$(pct exec "${CTID}" -- cat /etc/waydroid-webapp/api-token 2>/dev/null || true)"
-  WEBAPP_LISTEN="$(pct exec "${CTID}" -- bash -c "grep -oP '(?<=listen ).*(?=;)' /etc/nginx/sites-available/waydroid-webapp 2>/dev/null" || true)"
-  WEBAPP_PORT_ACTUAL="${WEBAPP_LISTEN##*:}"
-  if [[ "${WEBAPP_LISTEN}" == 0.0.0.0:* ]]; then
-    ACCESS_MSG="Webapp (GPS control + remote screen): http://${CT_IP:-<CTID_IP>}:${WEBAPP_PORT_ACTUAL:-8088}/
-   Remote screen:  http://${CT_IP:-<CTID_IP>}:${WEBAPP_PORT_ACTUAL:-8088}/vnc/vnc.html
-   API key:        ${WEBAPP_TOKEN:-<check /etc/waydroid-webapp/api-token>}
-   WARNING: exposed on the LAN (--webapp-expose-lan). The API key gates
-   webapp actions only - the remote screen has no authentication at all."
+  WEBAPP_HOST_ACTUAL="$(pct exec "${CTID}" -- bash -c "grep -oP '(?<=^WEBAPP_HOST=).*' /etc/waydroid-webapp/webapp.env 2>/dev/null" || true)"
+  WEBAPP_PORT_ACTUAL="$(pct exec "${CTID}" -- bash -c "grep -oP '(?<=^WEBAPP_PORT=).*' /etc/waydroid-webapp/webapp.env 2>/dev/null" || true)"
+  if [[ "${WEBAPP_HOST_ACTUAL}" == "0.0.0.0" ]]; then
+    ACCESS_MSG="Webapp (GPS control + screen): http://${CT_IP:-<CTID_IP>}:${WEBAPP_PORT_ACTUAL:-8088}/
+   API key: ${WEBAPP_TOKEN:-<check /etc/waydroid-webapp/api-token>}
+   WARNING: exposed on the LAN (--webapp-expose-lan). Every action still
+   requires the API key above - treat it like a password."
   else
-    ACCESS_MSG="Webapp + remote screen, via one SSH tunnel:
+    ACCESS_MSG="Webapp (GPS control + screen), via SSH tunnel:
      ssh -L ${WEBAPP_PORT_ACTUAL:-8088}:127.0.0.1:${WEBAPP_PORT_ACTUAL:-8088} root@${CT_IP:-<CTID_IP>}
-     then open http://127.0.0.1:${WEBAPP_PORT_ACTUAL:-8088}/  (remote screen: .../vnc/vnc.html)
+     then open http://127.0.0.1:${WEBAPP_PORT_ACTUAL:-8088}/
    API key: ${WEBAPP_TOKEN:-<check /etc/waydroid-webapp/api-token>}"
   fi
 else
-  # Webapp not installed (or failed) - fall back to noVNC's own direct
-  # access, same as before the webapp existed. Query the container's
-  # actual, resolved state rather than trusting the local $EXPOSE_LAN
-  # variable: when left unset, 02-install-services.sh decides the real
-  # value itself (preserving whatever was already configured on a
-  # re-run) inside that separate pct exec invocation.
-  ACTUAL_EXPOSE_LAN="$(pct exec "${CTID}" -- bash -c "grep -q '0\.0\.0\.0:6080' /etc/systemd/system/novnc.service 2>/dev/null && echo yes || echo no")"
-  if [[ "${ACTUAL_EXPOSE_LAN}" == "yes" ]]; then
-    ACCESS_MSG="noVNC access: http://${CT_IP:-<CTID_IP>}:6080/vnc.html
-   WARNING: exposed on the LAN WITHOUT authentication (--expose-lan)."
-  else
-    ACCESS_MSG="noVNC access (via SSH tunnel, nothing exposed directly):
-     ssh -L 6080:127.0.0.1:6080 root@${CT_IP:-<CTID_IP>}
-     then open http://127.0.0.1:6080/vnc.html"
-  fi
+  ACCESS_MSG="No remote screen/control UI installed (--skip-webapp) - install it with
+   5-webapp/install-webapp.sh, or drive the device directly with 'adb'/
+   'waydroid shell' (see 4-waydroid-tools/)."
 fi
 
 if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
@@ -338,6 +308,6 @@ cat <<EOF
    Directory      : ${REMOTE_DIR} (inside the container)
 
  See the "Security" section of the README (privileged container,
- apparmor unconfined, VNC access) before using this in production.
+ apparmor unconfined) before using this in production.
 ============================================================
 EOF

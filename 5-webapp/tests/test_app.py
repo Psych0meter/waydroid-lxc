@@ -18,8 +18,11 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
+
+from PIL import Image
 
 _TMP = tempfile.mkdtemp(prefix="waydroid-webapp-test-")
 _TOOLS_DIR = os.path.join(_TMP, "tools")
@@ -45,6 +48,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module  # noqa: E402
 import auth  # noqa: E402
+import actions.screen as screen_module  # noqa: E402
 
 
 class WebappTestCase(unittest.TestCase):
@@ -89,17 +93,6 @@ class HealthAndIndexTest(WebappTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Waydroid Control", resp.data)
 
-    def test_index_shows_vnc_link_by_default(self):
-        # WEBAPP_UNIFY_VNC is unset in the test environment - app.py's
-        # index() route defaults it to "yes", same as install-webapp.sh.
-        resp = self.client.get("/")
-        self.assertIn(b'id="vnc-link"', resp.data)
-
-    def test_index_hides_vnc_link_when_unify_disabled(self):
-        with mock.patch.dict(os.environ, {"WEBAPP_UNIFY_VNC": "no"}):
-            resp = self.client.get("/")
-        self.assertNotIn(b'id="vnc-link"', resp.data)
-
 
 class AuthTest(WebappTestCase):
     def test_missing_key_rejected(self):
@@ -118,6 +111,12 @@ class AuthTest(WebappTestCase):
         # Favorites can hold real addresses - listing them is gated the
         # same as any mutating action, not left open as a plain GET.
         resp = self.client.get("/api/favorites/list")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_screenshot_also_requires_key(self):
+        # Same reasoning as favorites/list - it's a GET but still shows
+        # live device state, not left open.
+        resp = self.client.get("/api/screen/screenshot")
         self.assertEqual(resp.status_code, 401)
 
 
@@ -255,6 +254,106 @@ class FavoritesTest(WebappTestCase):
         list_resp = self.get("/api/favorites/list")
         ids = {f["id"] for f in list_resp.get_json()["data"]["favorites"]}
         self.assertEqual(ids, {first["id"], second["id"]})
+
+
+class ScreenTest(WebappTestCase):
+    """
+    actions.screen talks to a real adb server via adbutils, not a wrapped
+    shell script, so it's mocked at the adbutils.adb.device_list() level
+    (the one call every action funnels through via _device()) rather than
+    with a fake binary the way GpsTest fakes change-location.sh.
+    """
+
+    def _mock_device(self, width=1080, height=1920):
+        device = mock.MagicMock()
+        device.window_size.return_value = types.SimpleNamespace(width=width, height=height)
+        device.screenshot.return_value = Image.new("RGB", (2, 2), color=(255, 0, 0))
+        return device
+
+    def test_screenshot_success(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.get("/api/screen/screenshot")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.mimetype, "image/png")
+        self.assertTrue(resp.data.startswith(b"\x89PNG"))
+
+    def test_screenshot_no_device(self):
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[]), \
+             mock.patch("actions.screen.subprocess.run"):
+            resp = self.get("/api/screen/screenshot")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No adb device", resp.get_json()["message"])
+
+    def test_screenshot_multiple_devices_is_an_error(self):
+        devices = [self._mock_device(), self._mock_device()]
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=devices):
+            resp = self.get("/api/screen/screenshot")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("expected exactly one", resp.get_json()["message"])
+
+    def test_reconnect_attempted_when_no_device_initially(self):
+        # device_list() returns [] the first time (triggers a reconnect
+        # attempt via 'waydroid adb connect'), then a device the second
+        # time - simulates a container that just came back after a
+        # restart. Only reconnects once - never on the fast/common path.
+        device = self._mock_device()
+        with mock.patch.object(
+            screen_module.adbutils.adb, "device_list", side_effect=[[], [device]]
+        ) as device_list_mock, mock.patch("actions.screen.subprocess.run") as run_mock:
+            resp = self.post("/api/screen/tap", {"x": 1, "y": 1})
+        self.assertEqual(resp.status_code, 200)
+        run_mock.assert_called_once()
+        self.assertEqual(device_list_mock.call_count, 2)
+
+    def test_tap_success(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/tap", {"x": 100, "y": 200})
+        self.assertEqual(resp.status_code, 200)
+        device.click.assert_called_once_with(100, 200)
+
+    def test_tap_out_of_range(self):
+        device = self._mock_device(width=1080, height=1920)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/tap", {"x": 5000, "y": 200})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_swipe_success(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post(
+                "/api/screen/swipe",
+                {"x1": 100, "y1": 200, "x2": 100, "y2": 800, "duration_ms": 250},
+            )
+        self.assertEqual(resp.status_code, 200)
+        device.swipe.assert_called_once_with(100, 200, 100, 800, duration=0.25)
+
+    def test_send_text_requires_nonempty(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/text", {"text": "   "})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_send_text_success(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/text", {"text": "hello"})
+        self.assertEqual(resp.status_code, 200)
+        device.send_keys.assert_called_once_with("hello")
+
+    def test_send_key_invalid(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/key", {"key": "nope"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_send_key_valid(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/key", {"key": "back"})
+        self.assertEqual(resp.status_code, 200)
+        device.keyevent.assert_called_once_with(4)
 
 
 if __name__ == "__main__":

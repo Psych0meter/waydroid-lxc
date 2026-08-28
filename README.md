@@ -1,8 +1,9 @@
 # Proxmox LXC Waydroid Deployment
 
 Infrastructure-as-code to deploy a headless Android environment (Waydroid)
-inside a Debian 13 LXC container on Proxmox, with browser-based remote
-access (noVNC), device identity spoofing, and GPS injection.
+inside a Debian 13 LXC container on Proxmox, with a browser-based control
+webapp (screen view + tap/swipe/text, GPS mock-location), device identity
+spoofing, and GPS injection.
 
 ## One-command deployment (recommended)
 
@@ -24,38 +25,33 @@ This script:
    automatically **applying** the Pixel 5 device spoof (pass
    `--skip-spoof` to leave `spoof-device.sh` downloaded but unapplied)
    and always enabling headless adb authorization
-   (`4-waydroid-tools/enable-adb.sh`, needed for GPS mock-location to
-   work without a human clicking an "Allow USB debugging" popup in
-   noVNC), then restarting the container before Waydroid's first boot,
-   so About Phone already shows Pixel 5 the first time you open it.
+   (`4-waydroid-tools/enable-adb.sh`, needed for GPS mock-location and the
+   webapp's screen control to work without a human clicking an "Allow USB
+   debugging" popup), then restarting the container before Waydroid's
+   first boot, so About Phone already shows Pixel 5 the first time you
+   open it.
 5. Enables `waydroid-session.service` (auto-start on boot) and, once the
    session is up, installs and configures the GPS mock-location app
    automatically (pass `--skip-gps-setup` to leave it for later), then
-   installs the GPS control webapp (`5-webapp/` - a browser UI plus API
-   to drive `change-location.sh`, with noVNC unified behind the same
-   port; pass `--skip-webapp` to leave it for later, see
-   `5-webapp/README.md`).
+   installs the webapp (`5-webapp/` - a browser UI plus API for GPS
+   control and adb-based screen control; pass `--skip-webapp` to leave it
+   for later, see `5-webapp/README.md`).
 
-By default, **noVNC and the webapp are each only reachable via an SSH
-tunnel** (see "Security" below). To expose noVNC directly on the LAN
-(without a password):
+By default, **the webapp is only reachable via an SSH tunnel** (see
+"Security" below). To expose it directly on the LAN (every action still
+requires its API key):
 
 ```bash
-./0-deploy-all.sh --expose-lan
+./0-deploy-all.sh --webapp-expose-lan
 ```
-
-The webapp has its own, separate switch - `--webapp-expose-lan` - since
-it sits behind an API key even when exposed (see "Accessing the
-interface" below for how the two flags interact once the webapp is
-installed).
 
 `community-scripts/ProxmoxVE` is an independent third-party project;
 `0-deploy-all.sh` downloads and runs its `ct/debian.sh` script **on every
 run**, including when `--ctid` points at an already-existing container -
 only the LXC config injection step (step 3) is actually guarded against
 re-running. If you'd rather not run third-party code against an existing
-container, or just want to change a setting like `--expose-lan` on an
-already-deployed one, use the manual per-step scripts below instead of
+container, or just want to change a setting like `--webapp-expose-lan` on
+an already-deployed one, use the manual per-step scripts below instead of
 rerunning `0-deploy-all.sh` (see `docs/DEBUGGING_AND_TESTS.md`, Phase 6, for
 the targeted commands).
 
@@ -67,79 +63,72 @@ the targeted commands).
 3. Append the contents of `1-proxmox-host/lxc-config-append.txt` (minus
    comments) to `/etc/pve/lxc/<VMID>.conf`, then restart the container.
 4. Inside the container: `2-lxc-setup/01-install-waydroid.sh`
-5. Then: `EXPOSE_LAN=no 3-services/02-install-services.sh`
+5. Then: `3-services/02-install-services.sh`
 6. Then: `4-waydroid-tools/03-setup-tools.sh`
 7. Optional, to spoof the device as a Pixel 5 before first boot (skip this
    step if you'd rather leave it stock, or review `spoof-device.sh` first):
    `4-waydroid-tools/apply-spoof.sh`
 8. `4-waydroid-tools/enable-adb.sh` (sets `ro.adb.secure=0` before first
-   boot - needed so `adb`/GPS mock-location can authenticate without a
-   human clicking an authorization popup in noVNC; see "Security" below).
-   Then, since this and/or the spoof step above only take effect on the
-   Android container's next start: `systemctl stop waydroid-session &&
-   systemctl restart waydroid-container`
+   boot - needed so `adb`/GPS mock-location/the webapp's screen control
+   can authenticate without a human clicking an authorization popup; see
+   "Security" below). Then, since this and/or the spoof step above only
+   take effect on the Android container's next start: `systemctl stop
+   waydroid-session && systemctl restart waydroid-container`
 9. `systemctl start waydroid-session`
 10. Optional, to enable GPS mock locations (needs the session running,
     unlike the two steps above): `4-waydroid-tools/setup-gps.sh`, then
     `4-waydroid-tools/change-location.sh <lat> <lng>`.
-11. Optional, for the GPS control webapp (needs `3-services/02-install-services.sh`
-    already run - it unifies noVNC behind the webapp's own port by
-    default): `5-webapp/install-webapp.sh`. See `5-webapp/README.md`.
+11. Optional, for the control webapp (GPS control + adb-based screen
+    control): `5-webapp/install-webapp.sh`. See `5-webapp/README.md`.
 12. Access: see the message printed at the end of installation, or the
     "Accessing the interface" section below.
 
 ## Accessing the interface
 
-**If the webapp is installed** (the default via `0-deploy-all.sh`, or
-manual step 11 above), it and noVNC are unified behind one port - see
-`5-webapp/README.md`'s "Unified webapp + noVNC gateway" section for how.
-The rest of this section describes noVNC's **own** exposure, which only
-matters when the webapp is skipped (`--skip-webapp`) - once it's
-installed, `--webapp-expose-lan` / `--no-webapp-expose-lan` control
-external reachability for both instead, and noVNC's own port is always
-forced back to loopback-only regardless of `--expose-lan` below.
+Everything - GPS control and the live screen view/tap/swipe/text control -
+is served by the webapp on a single port, gated by a per-deployment API
+key (generated on install, printed at the end of `install-webapp.sh` /
+`0-deploy-all.sh`, and readable afterwards from
+`/etc/waydroid-webapp/api-token` inside the container).
 
-By default (without `--expose-lan` / `EXPOSE_LAN=yes`), wayvnc and noVNC
-only listen on `127.0.0.1` **inside the container**. From your machine:
+By default (without `--webapp-expose-lan` / `WEBAPP_EXPOSE_LAN=yes`), the
+webapp only listens on `127.0.0.1` **inside the container**. From your
+machine:
 
 ```bash
-ssh -L 6080:127.0.0.1:6080 root@<LXC_IP>
+ssh -L 8088:127.0.0.1:8088 root@<LXC_IP>
 ```
 
-then open `http://127.0.0.1:6080/vnc.html`.
+then open `http://127.0.0.1:8088/` and enter the API key.
 
-With `--expose-lan` / `EXPOSE_LAN=yes`, only **noVNC** (the web bridge, port
-6080) is exposed on all interfaces; `wayvnc` (the raw VNC protocol, port
-5900) always stays local - `websockify` connects to it internally, so
-there's no need to expose it too for browser access. Handy if you already
-reach your homelab over a VPN (the VPN then acts as the security perimeter,
-since noVNC itself has no authentication):
+With `--webapp-expose-lan` / `WEBAPP_EXPOSE_LAN=yes`, the webapp listens on
+all interfaces. Every action still requires the API key - treat it like a
+password on an open network. Handy if you already reach your homelab over
+a VPN (the VPN then acts as the security perimeter):
 
 ```bash
-./0-deploy-all.sh --expose-lan
+./0-deploy-all.sh --webapp-expose-lan
 ```
 
-then, from a machine connected to the VPN: `http://<LXC_IP>:6080/vnc.html`
+then, from a machine connected to the VPN: `http://<LXC_IP>:8088/`
 
-Re-running `0-deploy-all.sh` (or `3-services/02-install-services.sh`
-directly) against an existing container **without** `--expose-lan` /
-`--no-expose-lan` **preserves** whichever mode is already configured -
-it won't silently put an exposed deployment back behind a tunnel. Pass
-`--no-expose-lan` explicitly to force tunnel-only access again.
-`--webapp-expose-lan` doesn't preserve like this - it defaults to
-tunnel-only on every run, so pass it again explicitly if you want it to
-stick on a re-run.
+Unlike `EXPOSE_LAN` in an earlier version of this repo (which controlled
+an unauthenticated noVNC bridge and preserved its mode across re-runs),
+`WEBAPP_EXPOSE_LAN` always defaults to tunnel-only on every run, including
+a re-run against an existing deployment - it does not preserve a prior
+`--webapp-expose-lan`. Pass it again explicitly to keep the webapp exposed.
 
 ## Project layout
 
 * `0-deploy-all.sh` - Full orchestrator (host -> container -> services).
 * `1-proxmox-host/` - Scripts/config applied on the Proxmox host.
 * `2-lxc-setup/` - Installs Waydroid and its dependencies in the container.
-* `3-services/` - systemd units (Sway headless, WayVNC, noVNC, Waydroid session).
+* `3-services/` - systemd units (Sway headless compositor, Waydroid session).
 * `4-waydroid-tools/` - Device spoofing, GPS, manual startup wrapper, Play
   Store emulated-storage workaround.
-* `5-webapp/` - Flask webapp/API for GPS control (map UI, favorites), with
-  noVNC unified behind its own port - see `5-webapp/README.md`.
+* `5-webapp/` - Flask webapp/API for GPS control (map UI, favorites) and
+  adb-based screen control (view + tap/swipe/text) - see
+  `5-webapp/README.md`.
 * `tests/` - `lint.sh` (static, no Proxmox needed) and `smoke-test.sh` (run
   inside the container after deployment).
 * `docs/` - Detailed debugging methodology.
@@ -147,14 +136,20 @@ stick on a re-run.
 ## Architecture choice: Sway, not Weston
 
 The Wayland compositor used is **Sway** (wlroots-based), in headless mode
-(`WLR_BACKENDS=headless`, no `libinput` devices). This isn't arbitrary:
-`wayvnc` depends on wlroots-specific protocols
-(`zwlr_virtual_pointer_manager_v1` for remote keyboard/mouse, an
-`xdg-output` revision Weston doesn't implement) - with Weston, `wayvnc`
-consistently fails to start (`Failed to initialise wayland` / `invalid
-version for global zxdg_output_manager_v1`). This is the combination
-officially documented by the wayvnc project and the ArchWiki for headless
-use.
+(`WLR_BACKENDS=headless`, no `libinput` devices). Waydroid's Android
+container needs *some* compositor present for SurfaceFlinger to render
+through (see `waydroid-session.service`'s `Requires=`), even though
+nothing displays its output directly - the webapp captures frames via
+`adb shell screencap`/adbutils instead of reading the compositor's output.
+Sway was originally chosen here because an earlier version of this repo
+also ran `wayvnc` (a wlroots-only VNC server) directly on top of it for
+screen sharing - `wayvnc` depends on wlroots-specific protocols
+(`zwlr_virtual_pointer_manager_v1`, an `xdg-output` revision Weston
+doesn't implement) and fails to start under Weston. `wayvnc`/noVNC have
+since been removed in favor of the webapp's adb-based screen control (see
+`5-webapp/README.md`), but Sway remains a well-documented, low-overhead
+choice for running Waydroid headless, so there was no reason to switch
+compositors when that changed.
 
 ## Known limitations
 
@@ -180,20 +175,17 @@ rebuilding a kernel module:
   container gets much broader hardware access and capabilities than a
   standard LXC, weakening isolation from the Proxmox host. Only deploy this
   container on a trusted host/LAN.
-* **noVNC/wayvnc unauthenticated by default**: by design, this repo binds
-  them to `127.0.0.1` and recommends an SSH tunnel. The `--expose-lan` /
-  `EXPOSE_LAN=yes` flag lifts that restriction but **adds no
-  authentication** - only use it on a trusted local network. (Only
-  applies when the webapp is skipped - see the next bullet.)
-* **Webapp: API-key-gated, but the remote screen it links to still isn't**
-  (`5-webapp/`, installed by default): the webapp itself requires a
-  per-deployment API key for every action, but by unifying noVNC behind
-  its own port (the default) it also becomes the thing controlling
-  noVNC's external reachability - `--webapp-expose-lan` /
-  `WEBAPP_EXPOSE_LAN=yes`, same trust model as `--expose-lan` above (no
-  authentication on the VNC view itself). See `5-webapp/README.md`'s
-  "Security" section for the full breakdown (favorites stored in plain
-  JSON, Nominatim as a third-party geocoding dependency, etc.).
+* **Webapp: every action, including the screen view, is API-key-gated**
+  (`5-webapp/`, installed by default): by design, this repo binds it to
+  `127.0.0.1` and recommends an SSH tunnel. `--webapp-expose-lan` /
+  `WEBAPP_EXPOSE_LAN=yes` lifts that restriction, but unlike the
+  unauthenticated noVNC bridge an earlier version of this repo used,
+  **every** webapp action - including fetching a screenshot or sending a
+  tap - requires the per-deployment API key, so exposing it on the LAN
+  means trusting that key like a password, not handing out an open view.
+  See `5-webapp/README.md`'s "Security" section for the full breakdown
+  (favorites stored in plain JSON, Nominatim as a third-party geocoding
+  dependency, etc.).
 * **Unsigned third-party tool, applied automatically**
   (`4-waydroid-tools/03-setup-tools.sh` + `apply-spoof.sh`):
   `spoof-device.sh` is downloaded from an individual GitHub repo (`main`
@@ -208,8 +200,9 @@ rebuilding a kernel module:
 * **`ro.adb.secure=0`, applied automatically** (`4-waydroid-tools/enable-adb.sh`):
   disables Android's normal adb RSA-key authorization popup, the same way
   real emulators do by default, so `adb`/`waydroid adb connect` (and
-  therefore GPS mock-location) work without a human clicking "Allow USB
-  debugging" in noVNC at the exact moment Android boots. This means *any*
+  therefore GPS mock-location and the webapp's screen control) work
+  without a human clicking "Allow USB debugging" at the exact moment
+  Android boots. This means *any*
   host that can reach the container's `waydroid0` bridge IP can attach a
   full adb shell with no authentication - in practice that bridge is only
   reachable from inside the LXC itself, not the wider LAN, so the exposure

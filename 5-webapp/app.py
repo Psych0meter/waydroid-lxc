@@ -23,20 +23,16 @@ def create_app() -> Flask:
     from routes.favorites import favorites_bp
     from routes.geocode import geocode_bp
     from routes.gps import gps_bp
+    from routes.screen import screen_bp
 
     app.register_blueprint(gps_bp, url_prefix="/api/gps")
     app.register_blueprint(geocode_bp, url_prefix="/api/geocode")
     app.register_blueprint(favorites_bp, url_prefix="/api/favorites")
+    app.register_blueprint(screen_bp, url_prefix="/api/screen")
 
     @app.get("/")
     def index():
-        # WEBAPP_UNIFY_VNC is written into webapp.env by install-webapp.sh
-        # (default "yes"): when the unified nginx gateway is in place, noVNC
-        # is reachable at /vnc/vnc.html on this same port, so show the link;
-        # in legacy mode (WEBAPP_UNIFY_VNC=no) noVNC is a separate
-        # port/service entirely and the webapp has no business linking to it.
-        show_vnc_link = os.environ.get("WEBAPP_UNIFY_VNC", "yes") == "yes"
-        return render_template("index.html", show_vnc_link=show_vnc_link)
+        return render_template("index.html")
 
     @app.get("/api/health")
     def health():
@@ -50,10 +46,10 @@ app = create_app()
 if __name__ == "__main__":
     # Only used for local/manual runs (e.g. development) - the systemd
     # service (install-webapp.sh) runs this through gunicorn instead,
-    # reading GUNICORN_HOST/GUNICORN_PORT from webapp.env directly in its
+    # reading WEBAPP_HOST/WEBAPP_PORT from webapp.env directly in its
     # ExecStart. Read the same two names here so a manual `python3 app.py`
     # against an installed webapp.env picks up the configured bind address
     # instead of silently defaulting to 127.0.0.1:8088.
-    host = os.environ.get("GUNICORN_HOST", "127.0.0.1")
-    port = int(os.environ.get("GUNICORN_PORT", "8088"))
+    host = os.environ.get("WEBAPP_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEBAPP_PORT", "8088"))
     app.run(host=host, port=port)

@@ -21,7 +21,7 @@ fi
 
 echo ""
 echo "== Packages =="
-for bin in sway wayvnc websockify waydroid; do
+for bin in sway waydroid adb; do
   if command -v "$bin" >/dev/null 2>&1; then
     pass "'$bin' binary found"
   else
@@ -31,7 +31,7 @@ done
 
 echo ""
 echo "== systemd services =="
-for svc in sway wayvnc novnc waydroid-container; do
+for svc in sway waydroid-container; do
   if systemctl is-active --quiet "$svc"; then
     pass "$svc service active"
   else
@@ -43,6 +43,17 @@ if systemctl is-enabled --quiet waydroid-session 2>/dev/null; then
 else
   fail "waydroid-session not enabled"
 fi
+# Optional - not installed at all if 0-deploy-all.sh was run with
+# --skip-webapp, so a missing unit is reported but doesn't fail the test.
+if [[ -f /etc/systemd/system/waydroid-webapp.service ]]; then
+  if systemctl is-active --quiet waydroid-webapp; then
+    pass "waydroid-webapp service active"
+  else
+    fail "waydroid-webapp service inactive (journalctl -u waydroid-webapp -e)"
+  fi
+else
+  echo "  (waydroid-webapp.service not installed - skipped, see 5-webapp/install-webapp.sh)"
+fi
 
 echo ""
 echo "== Wayland socket =="
@@ -51,11 +62,18 @@ SOCK="${XDG_RUNTIME_DIR:-/run/waydroid-wayland}/${WAYLAND_DISPLAY:-wayland-1}"
 
 echo ""
 echo "== Listening ports =="
-if command -v ss >/dev/null 2>&1; then
-  ss -ltnp 2>/dev/null | grep -q ':5900' && pass "wayvnc listening on :5900" || fail "nothing listening on :5900"
-  ss -ltnp 2>/dev/null | grep -q ':6080' && pass "websockify listening on :6080" || fail "nothing listening on :6080"
+WEBAPP_ENV="/etc/waydroid-webapp/webapp.env"
+if [[ -f "${WEBAPP_ENV}" ]]; then
+  WEBAPP_PORT="$(grep -oP '(?<=^WEBAPP_PORT=).*' "${WEBAPP_ENV}" 2>/dev/null || true)"
+  if command -v ss >/dev/null 2>&1 && [[ -n "${WEBAPP_PORT}" ]]; then
+    ss -ltnp 2>/dev/null | grep -q ":${WEBAPP_PORT} " \
+      && pass "webapp listening on :${WEBAPP_PORT}" \
+      || fail "nothing listening on :${WEBAPP_PORT} (see systemctl status waydroid-webapp)"
+  else
+    echo "  ('ss' not available or WEBAPP_PORT unreadable, skipping this step)"
+  fi
 else
-  echo "  ('ss' not available, skipping this step - install iproute2)"
+  echo "  (webapp not installed - skipped, see 5-webapp/install-webapp.sh)"
 fi
 
 echo ""

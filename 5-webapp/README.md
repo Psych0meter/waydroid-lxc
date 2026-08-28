@@ -1,35 +1,35 @@
 # Waydroid control webapp
 
-A small Flask app that exposes GPS mock-location control (and, later,
-other Android/Waydroid interactions) as an HTTP API plus a Leaflet
-map-based web UI, driving the existing `4-waydroid-tools/` scripts
-rather than reimplementing anything they already do.
+A small Flask app that exposes GPS mock-location control and adb-based
+screen control (view + tap/swipe/text) as an HTTP API plus a browser UI
+(Leaflet map for GPS, live screenshot polling for the screen), driving
+the existing `4-waydroid-tools/` scripts and the `adbutils` Python
+library rather than reimplementing anything they already do.
 
 ## Install
 
 Inside the container, after `4-waydroid-tools/setup-gps.sh` has run at
 least once (the webapp calls `change-location.sh`, which needs the
-mock-location app already installed):
+mock-location app already installed) and `4-waydroid-tools/enable-adb.sh`
+has run (so `adb`/adbutils can authenticate headlessly):
 
 ```bash
 ./install-webapp.sh
 ```
 
-This creates a Python virtualenv, vendors Leaflet locally (no CDN, no API
-key), installs the `waydroid-webapp` systemd service, and prints the
-generated API key plus how to reach the UI. By default (see "Unified
-webapp + noVNC gateway" below) it also installs nginx as the single
-external entry point for both the webapp and noVNC, bound to `127.0.0.1`
-only unless `WEBAPP_EXPOSE_LAN=yes` - see "Security" below.
+This creates a Python virtualenv (Flask, gunicorn, requests, adbutils),
+vendors Leaflet locally (no CDN, no API key), installs the `adb` package
+alongside it, installs the `waydroid-webapp` systemd service bound
+directly to `WEBAPP_HOST:WEBAPP_PORT`, and prints the generated API key
+plus how to reach the UI. Bound to `127.0.0.1` only unless
+`WEBAPP_EXPOSE_LAN=yes` - see "Security" below.
 
 Environment variables (all optional, all re-runnable):
 
 | Variable                | Default                                    | Meaning |
 |--------------------------|---------------------------------------------|---------|
-| `WEBAPP_EXPOSE_LAN`      | preserves current setting, else `no`         | `yes` binds `0.0.0.0` instead of `127.0.0.1` (on nginx's listener when `WEBAPP_UNIFY_VNC=yes`, on gunicorn's own otherwise) |
-| `WEBAPP_PORT`            | `8088`                                       | the port you actually connect to - stable across both modes |
-| `WEBAPP_UNIFY_VNC`       | `yes`                                        | `yes` fronts both the webapp and noVNC with nginx on one port; `no` keeps the old two-port setup |
-| `WEBAPP_INTERNAL_PORT`   | `8089`                                       | only used when `WEBAPP_UNIFY_VNC=yes`: gunicorn's own loopback-only port, behind nginx, never reachable directly |
+| `WEBAPP_EXPOSE_LAN`      | preserves current setting, else `no`         | `yes` binds `0.0.0.0` instead of `127.0.0.1` |
+| `WEBAPP_PORT`            | `8088`                                       | the port the webapp listens on |
 | `WAYDROID_TOOLS_DIR`     | `/opt/waydroid-lxc-deploy/4-waydroid-tools`  | where `change-location.sh` lives |
 | `WEBAPP_DATA_DIR`        | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
 | `LEAFLET_VERSION`        | `1.9.4`                                      | pinned Leaflet release to vendor |
@@ -45,9 +45,12 @@ favorite" saves whatever's currently in the coordinate fields under a
 name of your choice; the favorites list below it filters as you type and
 each entry re-applies its saved location with one click.
 
-When `WEBAPP_UNIFY_VNC=yes` (the default), a "Remote screen" link appears
-in the header next to "API key", opening noVNC at `/vnc/vnc.html` in a
-new tab - see "Unified webapp + noVNC gateway" below.
+The "Screen" panel below the map gives you a live view of the device:
+click "Start screen" to begin polling screenshots (about once a second)
+over adb, click/drag on the image to tap or swipe (drag distance under
+15px counts as a tap), and use the text field or the Back/Home/Recents
+buttons to send input - see "Screen: remote control" below for how this
+works.
 
 Or drive the API directly:
 
@@ -75,11 +78,36 @@ curl "http://127.0.0.1:8088/api/favorites/list?q=eiffel" -H "X-API-Key: <token>"
 curl -X POST http://127.0.0.1:8088/api/favorites/<id>/apply -H "X-API-Key: <token>"
 
 curl -X DELETE http://127.0.0.1:8088/api/favorites/<id> -H "X-API-Key: <token>"
+
+# Screen: current frame (binary PNG, not the usual JSON envelope)
+curl http://127.0.0.1:8088/api/screen/screenshot -H "X-API-Key: <token>" -o frame.png
+
+# Screen: tap / swipe / text / key
+curl -X POST http://127.0.0.1:8088/api/screen/tap \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"x": 500, "y": 900}'
+
+curl -X POST http://127.0.0.1:8088/api/screen/swipe \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"start_x": 500, "start_y": 1500, "end_x": 500, "end_y": 400, "duration_ms": 300}'
+
+curl -X POST http://127.0.0.1:8088/api/screen/text \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"text": "hello world"}'
+
+curl -X POST http://127.0.0.1:8088/api/screen/key \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"key": "back"}'
 ```
 
 Every response is JSON: `{"ok": true, "message": "...", "data": {...}}`
 on success, `{"ok": false, "message": "..."}` with a 4xx status on a
-validation or execution failure.
+validation or execution failure - except `GET /api/screen/screenshot`,
+which returns the raw PNG bytes directly (`Content-Type: image/png`) so
+the browser can display it without a base64 round trip; the same
+`X-API-Key` requirement still applies, which is why the frontend fetches
+it with `fetch()` rather than a plain `<img src>` (a browser-set `src`
+can't carry a custom header).
 
 ## Architecture
 
@@ -91,12 +119,13 @@ actions/
   gps.py          Wraps 4-waydroid-tools/change-location.sh.
   geocode.py      Wraps OpenStreetMap Nominatim (address -> coordinates).
   favorites.py    Named saved locations (JSON file store); "apply" calls actions/gps.py's set_location().
+  screen.py       Screenshot/tap/swipe/text/key, via adbutils talking to the device directly.
 routes/
   gps.py          Blueprint: HTTP glue for actions/gps.py.
   geocode.py      Blueprint: HTTP glue for actions/geocode.py.
   favorites.py    Blueprint: HTTP glue for actions/favorites.py.
-templates/, static/  Leaflet-based single-page UI (vendored Leaflet, no CDN).
-nginx-waydroid-webapp.conf  Template for the unified gateway's nginx site (installed when WEBAPP_UNIFY_VNC=yes) - see below.
+  screen.py       Blueprint: HTTP glue for actions/screen.py.
+templates/, static/  Leaflet-based single-page UI (vendored Leaflet, no CDN) plus the Screen panel's JS/CSS.
 ```
 
 `actions/` holds plain functions with no Flask/HTTP knowledge: they take
@@ -138,43 +167,42 @@ action is really "do an existing action, with different inputs" (a
 scheduled/recurring version of an existing action, a batch variant,
 etc.) instead of duplicating logic.
 
-## Unified webapp + noVNC gateway
+## Screen: remote control
 
-By default (`WEBAPP_UNIFY_VNC=yes`), `install-webapp.sh` installs nginx
-as a single external gateway in front of both this webapp and noVNC, so
-only one port needs to be reachable or tunneled for everything:
+An earlier version of this repo screen-shared the container's Wayland
+output over `wayvnc`/noVNC, fronted by nginx so it shared a port with
+this webapp. That's gone: `actions/screen.py` talks to the device
+directly over adb via the `adbutils` Python library instead, so there's
+no separate screen-sharing service, no nginx gateway, and no unauthenticated
+VNC view to worry about (every screen action goes through the same
+API-key-gated routes as everything else).
 
-* `/` (and everything else not matched below) proxies to gunicorn, which
-  now binds `127.0.0.1:${WEBAPP_INTERNAL_PORT}` (default `8089`) instead
-  of being reachable directly.
-* `/vnc/websockify` proxies noVNC's websocket connection, with the
-  Upgrade/Connection headers nginx needs to actually perform a websocket
-  upgrade rather than forward it as a plain GET. Confirmed against a
-  real browser session (not just source reading): when `vnc.html` is
-  loaded from `/vnc/vnc.html`, its own JS requests the websocket at
-  `/vnc/websockify` - relative to the page's own directory, not
-  root-absolute. This location has to sit at exactly that nested path
-  (nginx picks the longest matching literal prefix, so this wins over
-  the plain `/vnc/` location below for this one path only) - a
-  top-level `/websockify` location is never actually requested and
-  won't be hit.
-* `/vnc/` (everything else under it - `vnc.html`, `app/`/`core/`/`vendor/`
-  assets) proxies to websockify's static file server, with the `/vnc/`
-  prefix stripped so the files resolve exactly as noVNC expects.
+* `GET /api/screen/screenshot` calls `AdbDevice.screenshot()` (adbutils
+  wraps `adb exec-out screencap`) and returns the PNG bytes directly.
+  The frontend polls this roughly once a second while the Screen panel
+  is open, converting each response to a `Blob` URL and revoking the
+  previous one so repeated polling doesn't leak memory.
+* `POST /api/screen/tap` / `/swipe` call `AdbDevice.click()` /
+  `AdbDevice.swipe()`. The frontend disambiguates a single
+  pointerdown/pointerup pair by drag distance (in device-pixel space,
+  scaled from the displayed image's `naturalWidth`/`naturalHeight` vs.
+  its on-screen size): under 15px is a tap, otherwise a swipe.
+* `POST /api/screen/text` calls `AdbDevice.send_keys()`; `POST
+  /api/screen/key` calls `AdbDevice.keyevent()` for a small fixed set of
+  named keys (`back`, `home`, `recents`, `enter`, `backspace`, `power`,
+  `volume_up`, `volume_down`) rather than accepting arbitrary keycodes.
+* Connection handling: `actions/screen.py` first checks
+  `adbutils.adb.device_list()` (never raises, even with zero devices
+  connected) and only runs `waydroid adb connect` (the same reconnect
+  `4-waydroid-tools/change-location.sh` uses) when that list is empty -
+  so the common case (device already connected) stays fast, while a
+  container restart or dropped adb connection is recovered from
+  automatically on the next request.
 
-This also moves `novnc.service` to bind `127.0.0.1:6080`/`5900`
-permanently - `install-webapp.sh` rewrites its `ExecStart=` on every run
-- so `3-services/02-install-services.sh`'s own `EXPOSE_LAN` toggle for
-noVNC stops being the thing that controls external reachability;
-`WEBAPP_EXPOSE_LAN` (this script) is now the single switch for both
-services, since nginx is the only remaining exposure point.
-
-Pass `WEBAPP_UNIFY_VNC=no` to skip all of this and keep the old
-two-port setup, where the webapp and noVNC are each reachable/exposed
-independently and noVNC's own `EXPOSE_LAN` in `02-install-services.sh`
-applies as before. Requires `3-services/02-install-services.sh` to have
-already installed `novnc.service` (the script errors out early if it
-hasn't, rather than installing a gateway with nothing behind half of it).
+adbutils itself is pure Python, but it shells out to the real `adb`
+binary to start the local adb server if one isn't already running -
+that's why `install-webapp.sh` still installs the `adb` apt package
+even though the webapp no longer needs `websockify`/`novnc`.
 
 ## Security
 
@@ -182,11 +210,15 @@ Same "documented trade-off, LAN-only trust boundary" posture as the rest
 of this repo (see the top-level README's "Security" section):
 
 * **API-key auth, not a full account system**: every `/api/*` route that
-  mutates device state OR could expose something private (this now
-  includes `GET /api/favorites/list` - a saved "Home"/"Work" favorite is
-  a real address) requires a random per-deployment token (`X-API-Key`
-  header or `?api_key=` query param), generated on first run and stored
-  at `/etc/waydroid-webapp/api-token` (mode 600). There's no rate
+  mutates device state OR could expose something private (this includes
+  `GET /api/favorites/list` - a saved "Home"/"Work" favorite is a real
+  address - and `GET /api/screen/screenshot`, which shows whatever is on
+  the device's screen) requires a random per-deployment token
+  (`X-API-Key` header or `?api_key=` query param), generated on first run
+  and stored at `/etc/waydroid-webapp/api-token` (mode 600). This is a
+  security *improvement* over the old noVNC-based setup, where the
+  remote screen had no authentication of its own at all - now the screen
+  view is gated exactly like every other action. There's still no rate
   limiting or key rotation - treat the key like a password, and
   regenerate it by deleting that file and restarting the service if it
   leaks.
@@ -201,17 +233,14 @@ of this repo (see the top-level README's "Security" section):
   loading the page alone can't control the device.
 * **Bound to 127.0.0.1 by default** - use an SSH tunnel
   (`ssh -L 8088:127.0.0.1:8088 ...`) unless `WEBAPP_EXPOSE_LAN=yes` was
-  passed. With `WEBAPP_UNIFY_VNC=yes` (the default) this single bind
-  controls both the webapp and noVNC, since nginx is the only thing
-  either is reachable through; gunicorn and `novnc.service` both bind
-  `127.0.0.1` unconditionally, and the stock nginx default site (port
-  80) is disabled so it doesn't sit there as an unused extra open port.
-* **`/vnc/vnc.html` (noVNC) has no authentication of its own, unchanged
-  from before** - unifying it behind nginx doesn't add a login to it;
-  anyone who can reach the webapp's port can also reach the remote
-  screen. The API key gates webapp *actions* only, not the VNC view -
-  treat exposure of this port (`WEBAPP_EXPOSE_LAN=yes`) the same as you
-  would have treated exposing noVNC directly.
+  passed. Since there's no separate screen-sharing service anymore, this
+  one bind is the entire external attack surface.
+* **adb itself has no authentication once `ro.adb.secure=0` is set**
+  (`4-waydroid-tools/enable-adb.sh`, applied by default) - but adbutils
+  connects to the container's local adb server (`127.0.0.1:5037`), which
+  only the webapp process and anyone with shell access to the container
+  can reach; this doesn't add external exposure beyond what
+  `enable-adb.sh` already documents in the top-level README.
 * **Nominatim (address search) is a public, unauthenticated third-party
   service** - subject to its usage policy (roughly 1 request/second,
   descriptive User-Agent, no heavy automated use); fine for occasional
