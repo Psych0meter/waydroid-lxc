@@ -5,10 +5,12 @@
 # Pipeline: prepares the host, creates a privileged Debian 13 LXC via
 # community-scripts/ProxmoxVE, injects the binder/apparmor/cgroup config,
 # restarts the container, then runs the install scripts inside it in order
-# (2-lxc-setup -> 3-services -> 4-waydroid-tools), applying the Pixel 5
-# device spoof (pass --skip-spoof to leave it downloaded but unapplied)
-# and always enabling headless adb authorization (ro.adb.secure=0 - see
-# 4-waydroid-tools/enable-adb.sh), then restarting the container before
+# (2-lxc-setup -> 3-services -> 4-waydroid-tools), applying a device
+# identity spoof (Pixel 5 by default - pass --device <profile> to pick
+# another from 4-waydroid-tools/device-profiles/, or --skip-spoof to
+# leave it unapplied) and always enabling headless adb authorization
+# (ro.adb.secure=0 - see 4-waydroid-tools/enable-adb.sh), then restarting
+# the container before
 # Waydroid's first boot, then - once the session is up - installing and
 # configuring the GPS mock-location app (pass --skip-gps-setup to leave
 # it downloaded but unconfigured) and the GPS control + screen-control
@@ -31,17 +33,30 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+list_devices() {
+  echo "Available device profiles (4-waydroid-tools/device-profiles/):"
+  local f name desc
+  for f in "${SCRIPT_DIR}"/4-waydroid-tools/device-profiles/*.prop; do
+    [[ -e "${f}" ]] || continue
+    name="$(basename "${f}" .prop)"
+    desc="$(sed -n '2{s/^#[[:space:]]*//p}' "${f}")"
+    printf '  %-10s %s\n' "${name}" "${desc}"
+  done
+}
+
 CT_HOSTNAME="waydroid"
 CT_ID=""
 CT_NET="dhcp"
 CT_CPU=4
 CT_RAM=4096
 CT_DISK=16
-# Applies the Pixel 5 spoof automatically as part of deployment (see step
-# 4 below) - pass --skip-spoof to leave the downloaded spoof-device.sh
-# unapplied (e.g. if your threat model requires reviewing it first; see
-# the "Security" section of the README).
+# Applies a device identity spoof automatically as part of deployment (see
+# step 4 below) - pass --skip-spoof to leave it unapplied (e.g. if your
+# threat model requires reviewing it first; see the "Security" section of
+# the README), or --device <profile> to spoof as something other than the
+# default Pixel 5 (--list-devices shows what's available).
 SPOOF_DEVICE="yes"
+SPOOF_DEVICE_PROFILE="pixel-5"
 # Installs and configures the GPS mock-location app automatically once the
 # session is up - pass --skip-gps-setup to leave it installed manually
 # later via 4-waydroid-tools/setup-gps.sh.
@@ -64,19 +79,25 @@ while [[ $# -gt 0 ]]; do
     --ram) CT_RAM="$2"; shift 2 ;;
     --disk) CT_DISK="$2"; shift 2 ;;
     --skip-spoof) SPOOF_DEVICE="no"; shift 1 ;;
+    --device) SPOOF_DEVICE_PROFILE="$2"; shift 2 ;;
+    --list-devices) list_devices; exit 0 ;;
     --skip-gps-setup) SETUP_GPS="no"; shift 1 ;;
     --skip-webapp) INSTALL_WEBAPP="no"; shift 1 ;;
     --webapp-expose-lan) WEBAPP_EXPOSE_LAN="yes"; shift 1 ;;
     --no-webapp-expose-lan) WEBAPP_EXPOSE_LAN="no"; shift 1 ;;
     -h|--help)
       echo "Usage: $0 [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR] [--cpu N] [--ram MiB] [--disk GB]"
-      echo "          [--skip-spoof] [--skip-gps-setup]"
+      echo "          [--skip-spoof] [--device PROFILE] [--list-devices] [--skip-gps-setup]"
       echo "          [--skip-webapp] [--webapp-expose-lan|--no-webapp-expose-lan]"
       echo ""
-      echo "  --skip-spoof     Download spoof-device.sh (device identity spoofing) but don't run"
-      echo "                   it - by default this script applies it automatically, before the"
-      echo "                   Waydroid session's first boot, so About Phone shows Pixel 5 right"
-      echo "                   away. Use 4-waydroid-tools/apply-spoof.sh manually afterwards."
+      echo "  --skip-spoof     Don't apply a device identity spoof - by default this script"
+      echo "                   applies one automatically, before the Waydroid session's first"
+      echo "                   boot, so About Phone shows the spoofed device right away. Apply"
+      echo "                   one later with 4-waydroid-tools/apply-spoof.sh."
+      echo "  --device PROFILE Spoof as PROFILE instead of the default 'pixel-5' - see"
+      echo "                   4-waydroid-tools/device-profiles/README.md for the list and how"
+      echo "                   to add another device."
+      echo "  --list-devices   Print the available device profiles and exit."
       echo ""
       echo "  --skip-gps-setup Download the GPS mock-location app but don't install/configure it -"
       echo "                   by default this script does so automatically once the session is up."
@@ -219,10 +240,11 @@ echo "    -> Fetching Waydroid tools (device spoofing/GPS)..."
 pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && bash 03-setup-tools.sh"
 
 if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
-  echo "    -> Applying device spoof (Pixel 5) before Waydroid's first boot..."
-  pct exec "${CTID}" -- bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x apply-spoof.sh && ./apply-spoof.sh"
+  echo "    -> Applying device spoof '${SPOOF_DEVICE_PROFILE}' before Waydroid's first boot..."
+  pct exec "${CTID}" -- env "SPOOF_DEVICE_PROFILE=${SPOOF_DEVICE_PROFILE}" \
+    bash -c "cd '${REMOTE_DIR}/4-waydroid-tools' && chmod +x apply-spoof.sh && ./apply-spoof.sh"
 else
-  echo "    -> --skip-spoof: spoof-device.sh downloaded but not applied (see 4-waydroid-tools/apply-spoof.sh)."
+  echo "    -> --skip-spoof: no device spoof applied (see 4-waydroid-tools/apply-spoof.sh)."
 fi
 
 echo "    -> Enabling headless adb authorization (ro.adb.secure=0) before Waydroid's first boot..."
@@ -289,7 +311,7 @@ else
 fi
 
 if [[ "${SPOOF_DEVICE}" == "yes" ]]; then
-  SPOOF_MSG="Applied (About Phone should show Pixel 5) - roll back with apply-spoof.sh --rollback"
+  SPOOF_MSG="Applied: ${SPOOF_DEVICE_PROFILE} - roll back with apply-spoof.sh --rollback"
 else
   SPOOF_MSG="Skipped (--skip-spoof) - apply with 4-waydroid-tools/apply-spoof.sh"
 fi

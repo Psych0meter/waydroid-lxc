@@ -22,9 +22,11 @@ This script:
    `/etc/pve/lxc/<CTID>.conf` and restarts the container.
 4. Copies this repo into the container and runs, in order, the Waydroid
    install, the systemd services, then the spoofing/GPS tools -
-   automatically **applying** the Pixel 5 device spoof (pass
-   `--skip-spoof` to leave `spoof-device.sh` downloaded but unapplied)
-   and always enabling headless adb authorization
+   automatically **applying** a device identity spoof (Pixel 5 by
+   default; pass `--skip-spoof` to leave it unapplied, or `--device
+   <profile>` / `--list-devices` to pick another - see
+   `4-waydroid-tools/device-profiles/README.md`) and always enabling
+   headless adb authorization
    (`4-waydroid-tools/enable-adb.sh`, needed for GPS mock-location and the
    webapp's screen control to work without a human clicking an "Allow USB
    debugging" popup), then restarting the container before Waydroid's
@@ -65,9 +67,9 @@ the targeted commands).
 4. Inside the container: `2-lxc-setup/01-install-waydroid.sh`
 5. Then: `3-services/02-install-services.sh`
 6. Then: `4-waydroid-tools/03-setup-tools.sh`
-7. Optional, to spoof the device as a Pixel 5 before first boot (skip this
-   step if you'd rather leave it stock, or review `spoof-device.sh` first):
-   `4-waydroid-tools/apply-spoof.sh`
+7. Optional, to spoof the device (Pixel 5 by default) before first boot
+   - skip this step to leave it stock, or run `apply-spoof.sh --list` to
+   see other options first: `4-waydroid-tools/apply-spoof.sh`
 8. `4-waydroid-tools/enable-adb.sh` (sets `ro.adb.secure=0` before first
    boot - needed so `adb`/GPS mock-location/the webapp's screen control
    can authenticate without a human clicking an authorization popup; see
@@ -176,17 +178,19 @@ rebuilding a kernel module:
   `5-webapp/README.md`'s "Security" section for the full breakdown
   (favorites stored in plain JSON, Nominatim as a third-party geocoding
   dependency, etc.).
-* **Unsigned third-party tool, applied automatically**
-  (`4-waydroid-tools/03-setup-tools.sh` + `apply-spoof.sh`):
-  `spoof-device.sh` is downloaded from an individual GitHub repo (`main`
-  by default) and, by default, **run automatically** by `0-deploy-all.sh`
-  before Waydroid's first boot. Set `SPOOF_REF` to pin a specific commit,
-  and review `spoof-device.sh`'s content first if your threat model
-  requires it - pass `--skip-spoof` to download it without running it.
-  Either way, apply/re-apply it via `4-waydroid-tools/apply-spoof.sh`
-  rather than running `spoof-device.sh` directly - the wrapper snapshots
-  the pre-spoof configuration and makes re-applying it idempotent, and can
-  roll the change back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4).
+* **Device identity spoofing, applied automatically** (`4-waydroid-tools/apply-spoof.sh`
+  + `device-profiles/`): appends a fixed block of `ro.product.*`/`ro.build.*`
+  properties to `waydroid_base.prop` so About Phone reports a real device
+  instead of "WayDroid x86_64" - by default, Pixel 5 (`--skip-spoof` to
+  leave it unapplied). The property values are vendored in this repo
+  (`4-waydroid-tools/device-profiles/pixel-5.prop`), not downloaded at
+  install time - review them directly, and see
+  `4-waydroid-tools/device-profiles/README.md` for where they come from
+  (credit: [Quackdoc/waydroid-scripts](https://github.com/Quackdoc/waydroid-scripts))
+  and how to add another device with `--device <profile>`. Apply/re-apply
+  via `apply-spoof.sh`, not by hand - it snapshots the pre-spoof
+  configuration, makes re-applying idempotent, and can roll the change
+  back (see `docs/DEBUGGING_AND_TESTS.md`, Phase 4).
 * **`ro.adb.secure=0`, applied automatically** (`4-waydroid-tools/enable-adb.sh`):
   disables Android's normal adb RSA-key authorization popup, the same way
   real emulators do by default, so `adb`/`waydroid adb connect` (and

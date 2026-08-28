@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 # Runs INSIDE the Debian 13 LXC.
 #
-# Wraps spoof-device.sh (downloaded by 03-setup-tools.sh) to make applying
-# it idempotent and reversible. spoof-device.sh just appends a fixed block
-# of "key=value" lines to /var/lib/waydroid/waydroid_base.prop - run
-# directly, running it twice duplicates every line, and there's no way
-# back to the configuration Waydroid generated at 'waydroid init' time.
-# This script:
+# Applies a vendored device-identity spoof (device-profiles/*.prop - see
+# device-profiles/README.md) to Waydroid's waydroid_base.prop, idempotently
+# and reversibly:
 #   1. Snapshots the current file once, before the first-ever spoof, to
 #      <file>.orig - never overwritten again.
-#   2. Runs spoof-device.sh, then deduplicates the result by property key
-#      (text before the first '='), keeping the LAST occurrence of each -
-#      so re-running (e.g. after SPOOF_REF picks up an upstream change)
+#   2. Appends the selected profile's properties, then deduplicates the
+#      result by property key (text before the first '='), keeping the
+#      LAST occurrence of each - so switching profiles or re-running
 #      replaces old values instead of piling up duplicates.
 #   3. '--rollback' restores the snapshot instead of spoofing.
 #
@@ -22,19 +19,54 @@
 # shares this snapshot: whichever of the two scripts runs first on a
 # given container captures it, and '--rollback' here undoes both changes
 # at once.
+#
+# Usage: ./apply-spoof.sh [--device <profile>] [--list] [--rollback]
+#   --device <profile>  Profile name from device-profiles/*.prop (default:
+#                        pixel-5, or $SPOOF_DEVICE_PROFILE if set).
+#   --list               Print the available profiles and exit.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROFILES_DIR="${SCRIPT_DIR}/device-profiles"
 BASE_PROP="/var/lib/waydroid/waydroid_base.prop"
 BACKUP="${BASE_PROP}.orig"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESTART_HINT="systemctl stop waydroid-session && systemctl restart waydroid-container && systemctl start waydroid-session"
+
+list_profiles() {
+  echo "Available device profiles:"
+  local f name desc
+  for f in "${PROFILES_DIR}"/*.prop; do
+    [[ -e "${f}" ]] || continue
+    name="$(basename "${f}" .prop)"
+    desc="$(sed -n '2{s/^#[[:space:]]*//p}' "${f}")"
+    printf '  %-10s %s\n' "${name}" "${desc}"
+  done
+}
+
+DEVICE_PROFILE="${SPOOF_DEVICE_PROFILE:-pixel-5}"
+DO_ROLLBACK=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --device) DEVICE_PROFILE="$2"; shift 2 ;;
+    --list) list_profiles; exit 0 ;;
+    --rollback) DO_ROLLBACK=1; shift 1 ;;
+    -h|--help)
+      echo "Usage: $0 [--device <profile>] [--list] [--rollback]"
+      echo ""
+      list_profiles
+      exit 0
+      ;;
+    *) echo "Error: unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
 if [[ ! -f "${BASE_PROP}" ]]; then
   echo "Error: ${BASE_PROP} not found - has 'waydroid init' been run?" >&2
   exit 1
 fi
 
-if [[ "${1:-}" == "--rollback" ]]; then
+if [[ "${DO_ROLLBACK}" -eq 1 ]]; then
   if [[ ! -f "${BACKUP}" ]]; then
     echo "Error: no backup at ${BACKUP} - nothing to roll back to." >&2
     echo "(A backup is only created the first time this script applies a spoof.)" >&2
@@ -46,8 +78,10 @@ if [[ "${1:-}" == "--rollback" ]]; then
   exit 0
 fi
 
-if [[ ! -f "${SCRIPT_DIR}/spoof-device.sh" ]]; then
-  echo "Error: spoof-device.sh not found next to this script - run 03-setup-tools.sh first." >&2
+PROFILE_FILE="${PROFILES_DIR}/${DEVICE_PROFILE}.prop"
+if [[ ! -f "${PROFILE_FILE}" ]]; then
+  echo "Error: no device profile named '${DEVICE_PROFILE}' (${PROFILE_FILE} not found)." >&2
+  list_profiles >&2
   exit 1
 fi
 
@@ -59,8 +93,8 @@ if [[ ! -f "${BACKUP}" ]]; then
   cp "${BASE_PROP}" "${BACKUP}"
 fi
 
-echo "Applying spoof-device.sh..."
-( cd "${SCRIPT_DIR}" && ./spoof-device.sh )
+echo "Applying device profile '${DEVICE_PROFILE}' (${PROFILE_FILE})..."
+grep -v '^[[:space:]]*#' "${PROFILE_FILE}" | grep -v '^[[:space:]]*$' >> "${BASE_PROP}"
 
 echo "Deduplicating ${BASE_PROP} (keeping the last value for each key)..."
 TMP_PROP="$(mktemp)"

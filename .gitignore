@@ -4,7 +4,7 @@ __pycache__/
 
 # Leaflet is vendored at install time (5-webapp/install-webapp.sh), not
 # committed - mirrors how 4-waydroid-tools/03-setup-tools.sh downloads
-# spoof-device.sh/mock-location.apk rather than checking them in.
+# the GPS mock-location APK rather than checking it in. Device spoofing
+# no longer downloads anything - see 4-waydroid-tools/device-profiles/.
 /5-webapp/static/vendor/
-/4-waydroid-tools/spoof-device.sh
 /4-waydroid-tools/mock-location.apk

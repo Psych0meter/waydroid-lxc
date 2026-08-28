@@ -203,32 +203,35 @@ Store download paths ("Can't create file" errors in logcat rather than
 ## Phase 4: Test Device Spoofing
 
 `0-deploy-all.sh` applies this automatically by default (before Waydroid's
-first boot, via `apply-spoof.sh` - pass `--skip-spoof` to opt out). This
-phase is for verifying it took effect, or for re-applying/rolling it back
-by hand afterwards.
+first boot, via `apply-spoof.sh` - pass `--skip-spoof` to opt out, or
+`--device <profile>` to pick something other than the default Pixel 5).
+This phase is for verifying it took effect, or for re-applying/rolling it
+back/switching profiles by hand afterwards.
 
-`spoof-device.sh` (Quackdoc/waydroid-scripts) applies a single fixed
-Pixel 5 profile - there is no menu or profile choice. It works by
-**appending** `ro.product.*`/
-`ro.build.*` lines to `/var/lib/waydroid/waydroid_base.prop`. That file is
-only read when Waydroid mounts the Android rootfs, which happens when the
-underlying **container** (`waydroid-container.service`, from the waydroid
-package - the nested LXC that holds the Android image) starts, not when a
+`apply-spoof.sh` appends a device profile's `ro.product.*`/`ro.build.*`
+lines (`4-waydroid-tools/device-profiles/*.prop` - vendored in this repo,
+see that directory's README for where the default Pixel 5 profile comes
+from and how to add another device) to
+`/var/lib/waydroid/waydroid_base.prop`. That file is only read when
+Waydroid mounts the Android rootfs, which happens when the underlying
+**container** (`waydroid-container.service`, from the waydroid package -
+the nested LXC that holds the Android image) starts, not when a
 **session** (`waydroid-session.service`, this repo's unit) starts. So
 applying a spoof needs a container restart, not just a session restart.
 
-Don't run `spoof-device.sh` directly - it isn't idempotent (running it
-twice appends the same block twice) and offers no way back. Use
-`4-waydroid-tools/apply-spoof.sh` instead, which wraps it:
+Don't append a profile file to `waydroid_base.prop` by hand - doing that
+twice duplicates every line, and offers no way back. Use
+`4-waydroid-tools/apply-spoof.sh` instead:
 
-1. Navigate to `4-waydroid-tools/` and run `./apply-spoof.sh`. The first
-   time it runs, it snapshots the current `waydroid_base.prop` to
-   `waydroid_base.prop.orig` before touching anything; every run (first or
-   repeat) then applies `spoof-device.sh` and deduplicates the file by
-   property key, keeping the latest value - so re-running it (e.g. after
-   `SPOOF_REF` picks up an upstream change) replaces old values instead of
-   piling up duplicates. Safe to run with Waydroid up or down - it only
-   edits a file, read later.
+1. Navigate to `4-waydroid-tools/` and run `./apply-spoof.sh` (add
+   `--device <profile>` to pick a specific one, or `--list` to see what's
+   available). The first time it runs, it snapshots the current
+   `waydroid_base.prop` to `waydroid_base.prop.orig` before touching
+   anything; every run (first or repeat) then appends the selected
+   profile and deduplicates the file by property key, keeping the latest
+   value - so re-running it, or switching to a different profile,
+   replaces old values instead of piling up duplicates. Safe to run with
+   Waydroid up or down - it only edits a file, read later.
 2. Stop the session: `systemctl stop waydroid-session`
 3. Restart the container so it re-reads `waydroid_base.prop`:
    `systemctl restart waydroid-container`
@@ -239,28 +242,16 @@ twice appends the same block twice) and offers no way back. Use
 To go back to the pre-spoof configuration: `./apply-spoof.sh --rollback`,
 then repeat steps 2-4 above to apply it. Note this restores whatever the
 file looked like right before the *first* time `apply-spoof.sh` ran on
-this container - if you already spoofed manually (via `spoof-device.sh`
-directly) before this wrapper existed, that snapshot reflects the
-already-spoofed state, not the true `waydroid init` defaults; for a
-genuinely clean slate in that case, re-run `waydroid init -f` instead.
+this container - if you already spoofed manually before this wrapper
+existed, that snapshot reflects the already-spoofed state, not the true
+`waydroid init` defaults; for a genuinely clean slate in that case,
+re-run `waydroid init -f` instead.
 
 * **Known issue**: device still reports as generic "WayDroid x86_64"
-  after applying a spoof, with no error printed. Two independent causes,
-  both handled by `apply-spoof.sh`/`03-setup-tools.sh` but worth knowing
-  about if you're using a hand-downloaded copy of `spoof-device.sh`:
-  - `sudo: command not found` on every line of the script's output: the
-    upstream script unconditionally shells out to `sudo`, which isn't
-    installed in this minimal container (everything here already runs as
-    root, so elevation isn't actually needed). Since the script has no
-    `set -e`, it still exits 0 with **none** of the properties actually
-    written - `03-setup-tools.sh` strips the `sudo ` prefix right after
-    downloading it, so this shouldn't occur; if you hit it anyway, either
-    `apt-get install -y sudo` or edit your local copy of `spoof-device.sh`
-    to drop the `sudo ` prefix.
-  - Only restarting `waydroid-session` (step 2-4 above) instead of also
-    restarting `waydroid-container`: the properties get written to
-    `waydroid_base.prop` correctly, but nothing re-reads that file until
-    the container itself remounts the rootfs.
+  after applying a spoof, with no error printed. Check that you restarted
+  the **container**, not just the session (step 3 above) - the properties
+  get written to `waydroid_base.prop` correctly either way, but nothing
+  re-reads that file until the container itself remounts the rootfs.
 
 ## Phase 5: Test GPS Mock Location
 
@@ -389,9 +380,9 @@ an already-deployed container, and each guards its own expensive step:
 `01-install-waydroid.sh` skips `waydroid init` if `/var/lib/waydroid/images`
 already exists, `02-install-services.sh` always does a clean overwrite of
 its systemd units and unconditionally `restart`s them, and `03-setup-tools.sh`
-just re-downloads `spoof-device.sh`. For an existing container, run them
-directly with `pct exec <CTID> -- ...` (see "Manual deployment" in the
-README) rather than through `0-deploy-all.sh`.
+just re-downloads the GPS mock-location APK. For an existing container,
+run them directly with `pct exec <CTID> -- ...` (see "Manual deployment"
+in the README) rather than through `0-deploy-all.sh`.
 
 **`WEBAPP_EXPOSE_LAN` and re-running `0-deploy-all.sh`**: the webapp's LAN
 exposure is the only exposure switch in the repo. `0-deploy-all.sh` always
