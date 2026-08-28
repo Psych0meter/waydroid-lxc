@@ -141,14 +141,22 @@ unlocked), tracking the same indicator. "Set PIN" runs `locksettings
 set-pin` for you - the same thing as running it by hand over adb - to
 set a PIN for the first time or change an existing one (enter the
 current PIN in "Current PIN" when changing one; leave it blank when
-setting one for the first time).
+setting one for the first time). A rule line separates this PIN
+section from the phone controls (Back/Home/Recents/Kill-all, Send
+text) above it, and the PIN fields themselves are narrower than a
+regular text field - a PIN is realistically 4-8 digits, so there's no
+need to size the box for anything longer (the field itself still
+accepts up to 16).
 
 Below it, the "Location" card controls GPS mock-location - same card
 treatment as the Screen panel above it, with its own collapse toggle
-(the chevron next to the heading) for when you just want the screen
-space back and aren't actively picking a point: click a point on the
+(the chevron next to the heading) that hides just the map, not the
+address/coordinate fields or favorites beside it, for when you want the
+screen space back without losing access to those: click a point on the
 map, drag the marker, or search an address - the pin-icon button calls
-`change-location.sh` with the resulting coordinates. The star-icon
+`change-location.sh` with the resulting coordinates. Address search,
+the coordinate fields, and Favorites all live in this same card,
+alongside the map, rather than in a separate one. The star-icon
 button saves whatever's currently in the coordinate fields under a name
 of your choice; the favorites list below it filters as you type and
 each entry re-applies its saved location with one click.

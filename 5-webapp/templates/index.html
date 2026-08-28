@@ -59,13 +59,13 @@
           </p>
           <div class="row">
             <button type="button" id="screen-lock-btn" class="icon-btn" title="Lock - locks the device now (sends the power button once)" aria-label="Lock">&#128274;</button>
-            <input type="password" inputmode="numeric" id="screen-unlock-pin-input" placeholder="PIN" maxlength="16" autocomplete="off">
+            <input type="password" inputmode="numeric" class="pin-input" id="screen-unlock-pin-input" placeholder="PIN" maxlength="16" autocomplete="off">
             <button type="button" id="screen-unlock-btn" class="icon-btn" title="Unlock - enters this PIN as real key events and submits it, reaching the lock screen even with no working screenshot" aria-label="Unlock">&#128275;</button>
           </div>
           <form id="screen-set-pin-form">
             <div class="row">
-              <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-new-pin-input" placeholder="New PIN (4-16 digits)" maxlength="16" autocomplete="off" required>
-              <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-old-pin-input" placeholder="Current PIN (leave blank if none)" maxlength="16" autocomplete="off">
+              <input type="password" inputmode="numeric" pattern="[0-9]*" class="pin-input" id="screen-new-pin-input" placeholder="New PIN" title="4-16 digits" maxlength="16" autocomplete="off" required>
+              <input type="password" inputmode="numeric" pattern="[0-9]*" class="pin-input" id="screen-old-pin-input" placeholder="Current PIN" title="Leave blank if none" maxlength="16" autocomplete="off">
               <button type="submit" class="icon-btn" title="Set PIN - runs 'locksettings set-pin', same as doing it by hand" aria-label="Set PIN">&#128290;</button>
             </div>
           </form>
@@ -79,51 +79,53 @@
         <h2 class="section-heading">Location</h2>
         <button type="button" id="map-toggle-btn" class="icon-btn" title="Collapse Location" aria-label="Collapse Location">&#9662;</button>
       </div>
-      <div id="map-body">
-        <div id="map"></div>
-        <p class="hint">Click the map to set a location, or search an address below.</p>
+      <div id="location-body">
+        <div id="map-body">
+          <div id="map"></div>
+          <p class="hint">Click the map to set a location, or search an address below.</p>
+        </div>
+
+        <div id="location-side">
+          <form id="address-form">
+            <label for="address">Address</label>
+            <div class="row">
+              <input type="text" id="address" name="address" placeholder="e.g. Eiffel Tower, Paris">
+              <button type="submit" class="icon-btn" title="Search" aria-label="Search">&#128269;</button>
+            </div>
+          </form>
+
+          <form id="coords-form">
+            <label for="latitude">Latitude</label>
+            <input type="text" id="latitude" name="latitude" placeholder="48.8584" required>
+
+            <label for="longitude">Longitude</label>
+            <input type="text" id="longitude" name="longitude" placeholder="2.2945" required>
+
+            <label for="altitude">Altitude (m, optional)</label>
+            <input type="text" id="altitude" name="altitude" placeholder="35.0">
+
+            <div class="row">
+              <button type="submit" class="icon-btn" title="Set location" aria-label="Set location">&#128205;</button>
+              <button type="button" id="stop-btn" class="icon-btn" title="Stop sending location" aria-label="Stop sending location">&#9209;</button>
+            </div>
+          </form>
+
+          <div id="status" class="status-line" role="status"></div>
+
+          <section id="favorites-panel">
+            <h2 class="section-heading">Favorites</h2>
+            <input type="text" id="favorite-search" placeholder="Filter favorites...">
+            <ul id="favorites-list"></ul>
+            <form id="save-favorite-form">
+              <div class="row">
+                <input type="text" id="favorite-name" placeholder="Name this location" maxlength="100">
+                <button type="submit" class="icon-btn" title="Save favorite" aria-label="Save favorite">&#11088;</button>
+              </div>
+              <p class="hint">Saves the coordinates currently entered above.</p>
+            </form>
+          </section>
+        </div>
       </div>
-    </section>
-
-    <section id="form-panel">
-      <form id="address-form">
-        <label for="address">Address</label>
-        <div class="row">
-          <input type="text" id="address" name="address" placeholder="e.g. Eiffel Tower, Paris">
-          <button type="submit" class="icon-btn" title="Search" aria-label="Search">&#128269;</button>
-        </div>
-      </form>
-
-      <form id="coords-form">
-        <label for="latitude">Latitude</label>
-        <input type="text" id="latitude" name="latitude" placeholder="48.8584" required>
-
-        <label for="longitude">Longitude</label>
-        <input type="text" id="longitude" name="longitude" placeholder="2.2945" required>
-
-        <label for="altitude">Altitude (m, optional)</label>
-        <input type="text" id="altitude" name="altitude" placeholder="35.0">
-
-        <div class="row">
-          <button type="submit" class="icon-btn" title="Set location" aria-label="Set location">&#128205;</button>
-          <button type="button" id="stop-btn" class="icon-btn" title="Stop sending location" aria-label="Stop sending location">&#9209;</button>
-        </div>
-      </form>
-
-      <div id="status" class="status-line" role="status"></div>
-
-      <section id="favorites-panel">
-        <h2 class="section-heading">Favorites</h2>
-        <input type="text" id="favorite-search" placeholder="Filter favorites...">
-        <ul id="favorites-list"></ul>
-        <form id="save-favorite-form">
-          <div class="row">
-            <input type="text" id="favorite-name" placeholder="Name this location" maxlength="100">
-            <button type="submit" class="icon-btn" title="Save favorite" aria-label="Save favorite">&#11088;</button>
-          </div>
-          <p class="hint">Saves the coordinates currently entered above.</p>
-        </form>
-      </section>
     </section>
   </main>
 

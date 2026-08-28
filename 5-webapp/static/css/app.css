@@ -30,21 +30,21 @@ header {
 
 header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 
+/* Just #screen-panel and #map-panel stacked, each full width - both
+   are self-contained cards, so there's no need for main itself to be a
+   grid; #location-body below is where the side-by-side layout actually
+   happens now, nested inside the Location card. */
 main {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
   padding: 1rem;
 }
 
-@media (max-width: 800px) {
-  main { grid-template-columns: 1fr; }
-}
-
-/* Card treatment matching #screen-panel/#form-panel, not just a bare
-   heading - #map-header/#map-body split the same way #screen-header
-   does, so the collapse toggle (see app.js's setMapCollapsed) can hide
-   #map-body alone and leave the header/toggle visible. */
+/* Card treatment matching #screen-panel - #map-header/#map-body split
+   the same way #screen-header does, so the collapse toggle (see
+   app.js's setMapCollapsed) can hide #map-body alone and leave the
+   header/toggle (and #location-side below it) visible. */
 #map-panel {
   display: flex;
   flex-direction: column;
@@ -53,12 +53,6 @@ main {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem;
-  /* Without this, the grid's default align-items:stretch re-expands
-     #map-panel to match #form-panel's height (its row sibling) the
-     moment #map-body collapses to nothing, undoing the collapse
-     visually - same fix #form-panel already uses, size to own content
-     instead of stretching to fill the row. */
-  align-self: start;
 }
 
 #map-header {
@@ -67,9 +61,33 @@ main {
   justify-content: space-between;
 }
 
+/* Map on the left, Address/coordinates/Favorites alongside it on the
+   right - the same proportions the page-level grid used to give
+   #map-panel/#form-panel, now nested in one card instead of split
+   across two. */
+#location-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 800px) {
+  #location-body { grid-template-columns: 1fr; }
+}
+
+/* Collapsing #map-body leaves only one grid item - without this it'd
+   still sit in the 2fr track with the 1fr track empty beside it, so
+   #location-side is dropped to 1fr, letting it use the freed width
+   instead of leaving that gap unused. */
+#map-panel.collapsed #location-body { grid-template-columns: 1fr; }
+
 #map-body { display: flex; flex-direction: column; gap: 0.5rem; }
 
 #map-panel.collapsed #map-body { display: none; }
+
+/* Own content height, not stretched to match #map-body's - a 60vh map
+   is much taller than the address/coordinate fields need to be. */
+#location-side { display: flex; flex-direction: column; gap: 0.5rem; align-self: start; }
 
 .section-heading {
   font-size: 0.85rem;
@@ -88,17 +106,6 @@ main {
 }
 
 .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
-
-#form-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
-  align-self: start;
-}
 
 form { display: flex; flex-direction: column; gap: 0.4rem; }
 
@@ -141,6 +148,16 @@ button:hover { filter: brightness(1.1); }
   justify-content: center;
   font-size: 1.1rem;
   line-height: 1;
+}
+
+/* Narrower than a normal .row input (which defaults to flex:1, filling
+   whatever's left in the row) - a PIN is realistically 4-8 digits, so
+   stretching its field to match a full-width address/text input just
+   wastes space. Specificity has to beat the plain ".row input" rule
+   below, hence qualifying on .row too rather than .pin-input alone. */
+.row .pin-input {
+  flex: 0 0 auto;
+  width: 6rem;
 }
 
 /* Greyed out rather than just disabled-but-still-colored - used for
@@ -248,7 +265,6 @@ dialog form { gap: 0.6rem; }
 .favorite-delete:hover { color: var(--danger); border-color: var(--danger); }
 
 #screen-panel {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -356,5 +372,15 @@ dialog form { gap: 0.6rem; }
 
 #screen-controls { display: flex; flex-direction: column; gap: 0.5rem; }
 /* Same 0.5rem gap as #screen-controls above, so its own children (hint,
-   unlock row, set-pin form) don't stack with no spacing of their own. */
-#screen-lock-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+   unlock row, set-pin form) don't stack with no spacing of their own -
+   plus a rule line (same treatment as #favorites-panel) marking it off
+   from the phone controls (Back/Home/Recents/Kill-all, Send text)
+   above, since both groups otherwise sat in one undifferentiated
+   column of rows. */
+#screen-lock-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
