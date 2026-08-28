@@ -246,7 +246,12 @@ dialog form { gap: 0.6rem; }
   max-height: 70vh;
   width: auto;
   height: auto;
-  cursor: pointer;
+  /* Same "grab" hand as the Location map's drag/pan cursor (Leaflet's
+     .leaflet-grab/.leaflet-dragging), so both draggable surfaces in the
+     UI read the same way - an open hand at rest, a closed fist while a
+     tap/swipe is actually in progress (see #screen-img.dragging below,
+     toggled in app.js's pointerdown/pointerup/pointercancel handlers). */
+  cursor: grab;
   touch-action: none;
   -webkit-user-drag: none; /* disable native image drag, which breaks swipe */
   user-select: none;
@@ -255,6 +260,8 @@ dialog form { gap: 0.6rem; }
 }
 
 #screen-img[src] { display: block; }
+
+#screen-img.dragging { cursor: grabbing; }
 
 /* Indicates keyboard focus - keystrokes are forwarded to the device. */
 #screen-img:focus {

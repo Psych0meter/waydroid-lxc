@@ -654,6 +654,7 @@
     markActivity();
     screenImg.focus(); // arms the keydown listener below; see CSS :focus
     dragStart = toDeviceCoords(event);
+    screenImg.classList.add("dragging"); // grab -> grabbing, same as the map
     // Keeps pointermove/pointerup targeting this element even if the
     // drag overshoots its bounds.
     screenImg.setPointerCapture(event.pointerId);
@@ -661,9 +662,11 @@
 
   screenImg.addEventListener("pointercancel", () => {
     dragStart = null;
+    screenImg.classList.remove("dragging");
   });
 
   screenImg.addEventListener("pointerup", async (event) => {
+    screenImg.classList.remove("dragging");
     if (!screenPolling || !dragStart) return;
     const start = dragStart;
     dragStart = null;

@@ -528,3 +528,22 @@ get `KillMode=process` itself, so a future in-UI update doesn't need
 this manual step, redeploy or re-run `install-webapp.sh`/
 `update-webapp.sh` to pick up the current `waydroid-webapp.service`
 template.
+
+**`journalctl -u waydroid-webapp` shows "Unit process ... remains
+running after unit stopped" and "Found left-over process ... in
+control group ... This usually indicates unclean termination of a
+previous run, or service implementation deficiencies"** right after an
+in-UI update - this is `KillMode=process` (above) working exactly as
+intended, not a new problem: those left-over processes are
+`update-webapp.sh` itself (`bash`) and the `systemctl restart` command
+it just ran on itself (`systemctl`), both deliberately left alone by
+that restart so they can finish writing the update's outcome. systemd
+always logs any process still in a unit's cgroup after that unit
+stops with this same generic, slightly alarming wording, whether it's
+a genuine bug elsewhere or - as here - the whole point of the
+`KillMode` we chose; it's informational and can be ignored for this
+specific pair of processes. If `update-webapp.sh` (or a `systemctl`
+it spawned) is still showing up as left-over minutes later rather than
+clearing on the next restart, that's the actual problem worth chasing
+(check `ps aux` for a hung update, and `/var/log/waydroid-webapp-update.log`
+for where it stalled).
