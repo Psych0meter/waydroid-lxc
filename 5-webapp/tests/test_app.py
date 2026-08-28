@@ -508,6 +508,122 @@ class ScreenTest(WebappTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["data"]["stopped"], ["com.example.two"])
 
+    def test_lock_status_locked(self):
+        device = self._mock_device()
+        device.shell.return_value = (
+            "mCurrentFocus=Window{1 u0 com.android.systemui/"
+            ".keyguard.KeyguardService.Keyguard}\nmShowingLockscreen=true"
+        )
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.get("/api/screen/lock-status")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["data"]["locked"])
+        device.shell.assert_called_once_with(["dumpsys", "window"])
+
+    def test_lock_status_unlocked(self):
+        device = self._mock_device()
+        device.shell.return_value = (
+            "mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}\n"
+            "mShowingLockscreen=false\nmInputRestricted=false"
+        )
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.get("/api/screen/lock-status")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.get_json()["data"]["locked"])
+
+    def test_set_pin_success(self):
+        device = self._mock_device()
+        device.shell.return_value = "Pin set to '1234' for user 0\n"
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/set-pin", {"pin": "1234"})
+        self.assertEqual(resp.status_code, 200)
+        device.shell.assert_called_once_with(["locksettings", "set-pin", "1234"])
+
+    def test_set_pin_with_old_pin_passes_the_old_flag(self):
+        device = self._mock_device()
+        device.shell.return_value = "Pin set to '5678' for user 0\n"
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/set-pin", {"pin": "5678", "old_pin": "1234"})
+        self.assertEqual(resp.status_code, 200)
+        device.shell.assert_called_once_with(["locksettings", "set-pin", "--old", "1234", "5678"])
+
+    def test_set_pin_rejects_non_digit(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/set-pin", {"pin": "12ab"})
+        self.assertEqual(resp.status_code, 400)
+        device.shell.assert_not_called()
+
+    def test_set_pin_rejects_out_of_length_range(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/set-pin", {"pin": "123"})
+        self.assertEqual(resp.status_code, 400)
+        device.shell.assert_not_called()
+
+    def test_set_pin_surfaces_locksettings_failure_text(self):
+        # 'locksettings' reports a rejection (wrong/missing old
+        # credential, policy violation, ...) as text on stdout rather
+        # than a nonzero exit code - that text has to be inspected, not
+        # just assumed to mean success because the shell call itself
+        # didn't raise.
+        device = self._mock_device()
+        device.shell.return_value = "Old password doesn't match\n"
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/set-pin", {"pin": "1234"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("doesn't match", resp.get_json()["message"])
+
+    def _mock_lock_and_power(self, device, locked, awake=True):
+        def fake_shell(cmdargs):
+            if cmdargs == ["dumpsys", "window"]:
+                return "mShowingLockscreen=true" if locked else "mShowingLockscreen=false"
+            if cmdargs == ["dumpsys", "power"]:
+                return "mWakefulness=Awake" if awake else "mWakefulness=Asleep"
+            return ""
+
+        device.shell.side_effect = fake_shell
+
+    def test_unlock_enters_pin_via_keyevents_when_locked(self):
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=True, awake=True)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/unlock", {"pin": "1234"})
+        self.assertEqual(resp.status_code, 200)
+        # 1 2 3 4 -> KEYCODE_1..4 (8, 9, 10, 11), then KEYCODE_ENTER (66) -
+        # real key events, not text injection (see send_text's docstring).
+        device.keyevent.assert_has_calls(
+            [mock.call(8), mock.call(9), mock.call(10), mock.call(11), mock.call(66)]
+        )
+
+    def test_unlock_wakes_the_device_first_if_asleep(self):
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=True, awake=False)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/unlock", {"pin": "12"})
+        self.assertEqual(resp.status_code, 200)
+        device.keyevent.assert_has_calls(
+            [mock.call(26), mock.call(8), mock.call(9), mock.call(66)]
+        )
+
+    def test_unlock_does_nothing_when_already_unlocked(self):
+        # Sending digit keyevents blind when nothing needs them would just
+        # type stray digits into whatever's actually focused.
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=False)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/unlock", {"pin": "1234"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Already unlocked", resp.get_json()["message"])
+        device.keyevent.assert_not_called()
+
+    def test_unlock_rejects_non_digit_pin(self):
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/unlock", {"pin": "12ab"})
+        self.assertEqual(resp.status_code, 400)
+        device.keyevent.assert_not_called()
+
 
 class UpdateTest(WebappTestCase):
     """

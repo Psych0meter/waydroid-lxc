@@ -463,17 +463,27 @@
   const screenRefreshValueEl = document.getElementById("screen-refresh-value");
   const screenRefreshIndicatorEl = document.getElementById("screen-refresh-indicator");
   const screenRealtimeToggle = document.getElementById("screen-realtime-toggle");
+  const screenLockStatusEl = document.getElementById("screen-lock-status");
+  const screenUnlockPinInput = document.getElementById("screen-unlock-pin-input");
+  const screenUnlockBtn = document.getElementById("screen-unlock-btn");
+  const screenSetPinForm = document.getElementById("screen-set-pin-form");
+  const screenNewPinInput = document.getElementById("screen-new-pin-input");
+  const screenOldPinInput = document.getElementById("screen-old-pin-input");
 
   let screenPolling = false;
   let screenTimer = null;
   let screenObjectUrl = null;
   let dragStart = null;
+  let lockStatusTimer = null;
 
   // Poll rate: a fast "active" rate for a few seconds after an
   // interaction, decaying to a slower "idle" rate set by the drag bar.
   // "Real-time" overrides both with continuous back-to-back polling.
   const ACTIVE_POLL_INTERVAL_MS = 250;
   const ACTIVE_WINDOW_MS = 4000;
+  // Separate, much slower than the screenshot poll - lock-status is its
+  // own dumpsys call, not free, and doesn't need to track activity.
+  const LOCK_STATUS_POLL_MS = 3000;
   let idlePollIntervalMs = parseInt(screenRefreshRange.value, 10) || 1000;
   let lastActivityAt = 0;
   let realtimeMode = false;
@@ -592,6 +602,24 @@
     }
   }
 
+  // Polled independently of the screenshot loop (see LOCK_STATUS_POLL_MS)
+  // so a stuck/failing screenshot doesn't also freeze the lock indicator
+  // - the indicator is most useful exactly when the screen itself can't
+  // be captured.
+  async function pollLockStatus() {
+    if (!screenPolling) return;
+    try {
+      const result = await apiRequest("GET", "/api/screen/lock-status");
+      const locked = !!(result.data && result.data.locked);
+      screenLockStatusEl.textContent = "Lock: " + (locked ? "locked" : "unlocked");
+      screenLockStatusEl.className = locked ? "locked" : "unlocked";
+    } catch (err) {
+      screenLockStatusEl.textContent = "Lock: ?";
+      screenLockStatusEl.className = "";
+    }
+    if (screenPolling) lockStatusTimer = window.setTimeout(pollLockStatus, LOCK_STATUS_POLL_MS);
+  }
+
   function startScreen() {
     if (screenPolling) return;
     if (!getApiKey()) {
@@ -604,11 +632,13 @@
     lastFrameAt = null;
     lastFrameIntervalMs = null;
     pollScreen();
+    pollLockStatus();
   }
 
   function stopScreen() {
     screenPolling = false;
     if (screenTimer) window.clearTimeout(screenTimer);
+    if (lockStatusTimer) window.clearTimeout(lockStatusTimer);
     screenToggleBtn.textContent = "Start screen";
     // Hides the last frame rather than leaving it frozen on screen -
     // removing the attribute (not just clearing it) is what the
@@ -621,6 +651,8 @@
     screenImg.alt = "Waydroid screen (not started)";
     screenImg.blur();
     dragStart = null;
+    screenLockStatusEl.textContent = "Lock: -";
+    screenLockStatusEl.className = "";
     updateRefreshIndicator();
   }
 
@@ -727,6 +759,40 @@
       screenTextInput.value = "";
       setScreenStatus("", "");
       fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
+
+  screenUnlockBtn.addEventListener("click", async () => {
+    const pin = screenUnlockPinInput.value;
+    if (!pin) return;
+    markActivity();
+    try {
+      const result = await apiPost("/api/screen/unlock", { pin });
+      setScreenStatus(result.message || "PIN entered.", "ok");
+      screenUnlockPinInput.value = "";
+      pollLockStatus();
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
+
+  screenSetPinForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const pin = screenNewPinInput.value;
+    const oldPin = screenOldPinInput.value;
+    if (!pin) return;
+    markActivity();
+    try {
+      const result = await apiPost("/api/screen/set-pin", {
+        pin,
+        old_pin: oldPin || undefined,
+      });
+      setScreenStatus(result.message || "PIN set.", "ok");
+      screenNewPinInput.value = "";
+      screenOldPinInput.value = "";
     } catch (err) {
       setScreenStatus(err.message, "error");
     }

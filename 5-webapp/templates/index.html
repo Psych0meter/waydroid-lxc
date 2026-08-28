@@ -48,6 +48,22 @@
             <button type="submit">Send text</button>
           </div>
         </form>
+        <div id="screen-lock-panel">
+          <p class="hint">
+            <span id="screen-lock-status">Lock: -</span> - best-effort, polled while the screen is open.
+          </p>
+          <div class="row">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-unlock-pin-input" placeholder="PIN" maxlength="16" autocomplete="off">
+            <button type="button" id="screen-unlock-btn" title="Enter this PIN as real key events and submit it - reaches the lock screen even with no working screenshot">Unlock</button>
+          </div>
+          <form id="screen-set-pin-form">
+            <div class="row">
+              <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-new-pin-input" placeholder="New PIN (4-16 digits)" maxlength="16" autocomplete="off" required>
+              <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-old-pin-input" placeholder="Current PIN (leave blank if none)" maxlength="16" autocomplete="off">
+              <button type="submit" title="Runs 'locksettings set-pin', same as doing it by hand">Set PIN</button>
+            </div>
+          </form>
+        </div>
       </div>
       <div id="screen-status" class="status-line" role="status"></div>
     </section>

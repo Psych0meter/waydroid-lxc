@@ -3,7 +3,17 @@ from __future__ import annotations
 from flask import Blueprint, Response, jsonify, request
 
 from actions.base import ActionError
-from actions.screen import kill_all_apps, screenshot, send_key, send_text, swipe, tap
+from actions.screen import (
+    kill_all_apps,
+    lock_status,
+    screenshot,
+    send_key,
+    send_text,
+    set_pin,
+    swipe,
+    tap,
+    unlock_with_pin,
+)
 from auth import require_api_key
 
 screen_bp = Blueprint("screen", __name__)
@@ -77,6 +87,38 @@ def post_key():
 def post_kill_all():
     try:
         result = kill_all_apps()
+    except ActionError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify(result.to_dict())
+
+
+@screen_bp.get("/lock-status")
+@require_api_key
+def get_lock_status():
+    try:
+        result = lock_status()
+    except ActionError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify(result.to_dict())
+
+
+@screen_bp.post("/set-pin")
+@require_api_key
+def post_set_pin():
+    body = request.get_json(silent=True) or {}
+    try:
+        result = set_pin(pin=body.get("pin"), old_pin=body.get("old_pin"))
+    except ActionError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify(result.to_dict())
+
+
+@screen_bp.post("/unlock")
+@require_api_key
+def post_unlock():
+    body = request.get_json(silent=True) or {}
+    try:
+        result = unlock_with_pin(pin=body.get("pin"))
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     return jsonify(result.to_dict())

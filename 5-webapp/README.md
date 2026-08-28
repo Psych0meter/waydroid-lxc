@@ -118,6 +118,17 @@ touches third-party packages, not system ones like Settings/SystemUI,
 so it can't itself force-stop the thing that's stuck if that thing is a
 system screen.
 
+Below the text field, the "Lock: locked/unlocked" indicator shows the
+device's keyguard state (best-effort - see `GET /api/screen/lock-status`
+below). "Unlock" enters a PIN typed into the field next to it and works
+even with a completely broken screenshot, since it's the same
+digit-KeyEvent mechanism as typing a PIN directly into the Screen panel
+(see "Screen: remote control", below). "Set PIN" runs `locksettings
+set-pin` for you - the same thing as running it by hand over adb - to
+set a PIN for the first time or change an existing one (enter the
+current PIN in "Current PIN" when changing one; leave it blank when
+setting one for the first time).
+
 Below it, the "Location" panel controls GPS mock-location: click a point
 on the map, drag the marker, or search an address - "Set location" calls
 `change-location.sh` with the resulting coordinates. "Save favorite"
@@ -175,6 +186,19 @@ curl -X POST http://127.0.0.1:8088/api/screen/tap \
 curl -X POST http://127.0.0.1:8088/api/screen/swipe \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
   -d '{"x1": 500, "y1": 1500, "x2": 500, "y2": 400, "duration_ms": 300}'
+
+# Screen: lock-screen state, and setting/entering a PIN
+curl http://127.0.0.1:8088/api/screen/lock-status -H "X-API-Key: <token>"
+
+curl -X POST http://127.0.0.1:8088/api/screen/set-pin \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"pin": "1234"}'
+# ... or, changing an existing PIN:
+#  -d '{"pin": "5678", "old_pin": "1234"}'
+
+curl -X POST http://127.0.0.1:8088/api/screen/unlock \
+  -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+  -d '{"pin": "1234"}'
 
 curl -X POST http://127.0.0.1:8088/api/screen/text \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
@@ -304,6 +328,27 @@ goes through the same API-key-gated routes as everything else.
   unlike clearing Recents by hand, it works even when `screenshot`/tap
   are themselves failing, since it never needs to see or touch the
   screen.
+* `GET /api/screen/lock-status` greps `adb shell dumpsys window` for the
+  same signals Appium's own lock-state check uses (`mShowingLockscreen`,
+  `mDreamingLockscreen`, `mCurrentFocus` pointing at `Keyguard`,
+  `mInputRestricted`) and returns `{"locked": true|false}`. Best-effort,
+  not authoritative - there's no single flag guaranteed present across
+  every Android/Waydroid build. The Screen panel polls it every 3s
+  (separately from, and slower than, the screenshot poll) to show a
+  "Lock: locked/unlocked" indicator.
+* `POST /api/screen/unlock` takes `{"pin": "..."}`, checks
+  `lock-status` first (does nothing but report if already unlocked, so
+  it can't type stray digits into whatever's actually focused), wakes
+  the device if `dumpsys power` says it's asleep, then enters the PIN
+  as digit KeyEvents + `enter` - the same blind-entry mechanism as
+  typing into the Screen panel, wrapped into one call.
+* `POST /api/screen/set-pin` takes `{"pin": "...", "old_pin": "..."}`
+  (`old_pin` optional) and runs `adb shell locksettings set-pin [--old
+  <old_pin>] <pin>` - the same command that works by hand. `locksettings`
+  reports a rejection (wrong/missing old credential, policy violation)
+  as text on stdout rather than a nonzero exit code, so that text is
+  matched for failure keywords and surfaced back as-is rather than
+  assumed to mean success.
 * **Host-keyboard passthrough**: clicking the screen image gives it
   `tabindex="0"` focus (shown by a highlighted border), which arms a
   `keydown` listener scoped to that element - so it only fires while the

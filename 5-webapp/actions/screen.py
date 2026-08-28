@@ -9,6 +9,7 @@ See 5-webapp/README.md, "Screen: remote control".
 from __future__ import annotations
 
 import io
+import re
 import subprocess
 from contextlib import suppress
 
@@ -51,6 +52,19 @@ _KEY_CODES = {
     "8": 15,
     "9": 16,
 }
+
+# Same signals Appium's own lock-state check greps 'dumpsys window' for -
+# there's no single flag guaranteed present across every Android/Waydroid
+# build, so this is a best-effort union, not a guarantee. If it ever
+# reports the wrong thing, screenshot() failing (or not) is the stronger
+# ground-truth signal - see the FLAG_SECURE note in
+# docs/DEBUGGING_AND_TESTS.md.
+_LOCK_INDICATOR_PATTERNS = (
+    re.compile(r"mShowingLockscreen=true"),
+    re.compile(r"mDreamingLockscreen=true"),
+    re.compile(r"mCurrentFocus=.*Keyguard"),
+    re.compile(r"mInputRestricted=true"),
+)
 
 
 def _reconnect() -> None:
@@ -184,6 +198,98 @@ def send_key(key: object) -> ActionResult:
     except adbutils.AdbError as exc:
         raise ActionError(f"Key event failed: {exc}") from exc
     return ActionResult(ok=True, message="Key sent.")
+
+
+def _is_locked(device: adbutils.AdbDevice) -> bool:
+    try:
+        output = device.shell(["dumpsys", "window"])
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Couldn't read lock state: {exc}") from exc
+    return any(pattern.search(output) for pattern in _LOCK_INDICATOR_PATTERNS)
+
+
+def lock_status() -> ActionResult:
+    """
+    Best-effort keyguard detection - see _LOCK_INDICATOR_PATTERNS. Meant
+    for the UI to show a "locked"/"unlocked" indicator and to decide
+    whether unlock_with_pin() has anything to do; treat it as informative,
+    not authoritative.
+    """
+    device = _device()
+    locked = _is_locked(device)
+    return ActionResult(
+        ok=True,
+        message="Locked." if locked else "Unlocked.",
+        data={"locked": locked},
+    )
+
+
+def set_pin(pin: object, old_pin: object = None) -> ActionResult:
+    """
+    Sets or changes the device's lock-screen PIN via 'locksettings
+    set-pin <pin>' - the same shell command that already worked by hand.
+    Pass old_pin when a PIN is already set: 'locksettings' reports a
+    rejection (wrong/missing old credential, policy violation, ...) as
+    text on stdout rather than a nonzero exit code, so that text is
+    surfaced back as-is rather than guessed at.
+    """
+    if not isinstance(pin, str) or not pin.isdigit() or not (4 <= len(pin) <= 16):
+        raise ActionError("pin must be 4-16 digits.")
+    if old_pin not in (None, "") and (not isinstance(old_pin, str) or not old_pin.isdigit()):
+        raise ActionError("old_pin must be numeric digits.")
+
+    device = _device()
+    cmd = ["locksettings", "set-pin"]
+    if old_pin:
+        cmd += ["--old", old_pin]
+    cmd.append(pin)
+    try:
+        output = device.shell(cmd)
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Setting PIN failed: {exc}") from exc
+
+    output = (output or "").strip()
+    if re.search(r"fail|error|doesn'?t match", output, re.IGNORECASE):
+        raise ActionError(f"Setting PIN failed: {output or 'unknown error'}")
+
+    return ActionResult(ok=True, message=output or "PIN set.")
+
+
+def unlock_with_pin(pin: object) -> ActionResult:
+    """
+    Enters `pin` via digit KeyEvents and Enter - the same blind-entry
+    mechanism as typing a PIN into the Screen panel (see send_text's
+    docstring for why KeyEvents, not text injection, are what actually
+    reaches a keyguard), wrapped into one call. Wakes the device first if
+    it's asleep, since a locked-and-asleep device won't have the PIN pad
+    on screen to receive them. Does nothing but report if lock_status()
+    already says unlocked - sending digit keyevents blind when something
+    else has focus (a text field, a game...) would just type stray
+    digits into it.
+    """
+    if not isinstance(pin, str) or not pin.isdigit():
+        raise ActionError("pin must be numeric digits.")
+    device = _device()
+
+    if not _is_locked(device):
+        return ActionResult(ok=True, message="Already unlocked.", data={"locked": False})
+
+    try:
+        power_output = device.shell(["dumpsys", "power"])
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Couldn't read power state: {exc}") from exc
+    if re.search(r"mWakefulness=Asleep", power_output):
+        with suppress(adbutils.AdbError):
+            device.keyevent(_KEY_CODES["power"])
+
+    try:
+        for digit in pin:
+            device.keyevent(_KEY_CODES[digit])
+        device.keyevent(_KEY_CODES["enter"])
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Unlock failed: {exc}") from exc
+
+    return ActionResult(ok=True, message="PIN entered.", data={"locked": False})
 
 
 def kill_all_apps() -> ActionResult:
