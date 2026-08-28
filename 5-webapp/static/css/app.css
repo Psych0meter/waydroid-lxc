@@ -75,15 +75,13 @@ main {
   #location-body { grid-template-columns: 1fr; }
 }
 
-/* Collapsing #map-body leaves only one grid item - without this it'd
-   still sit in the 2fr track with the 1fr track empty beside it, so
-   #location-side is dropped to 1fr, letting it use the freed width
-   instead of leaving that gap unused. */
-#map-panel.collapsed #location-body { grid-template-columns: 1fr; }
-
 #map-body { display: flex; flex-direction: column; gap: 0.5rem; }
 
-#map-panel.collapsed #map-body { display: none; }
+/* Collapsing hides the whole card's content - map and address/
+   coordinates/favorites alike - leaving just the header and toggle,
+   the same "just the heading row" treatment as #screen-panel would
+   get if it had a toggle. */
+#map-panel.collapsed #location-body { display: none; }
 
 /* Own content height, not stretched to match #map-body's - a 60vh map
    is much taller than the address/coordinate fields need to be. */
@@ -381,6 +379,16 @@ dialog form { gap: 0.6rem; }
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+/* Same rule-line treatment as #screen-lock-panel itself, one level in -
+   splits "change PIN" off from the Lock/PIN-entry/Unlock row above it,
+   since they're two different actions (unlocking now vs. changing the
+   PIN for next time) that happened to read as one undifferentiated
+   group. */
+#screen-set-pin-form {
   border-top: 1px solid var(--border);
   padding-top: 0.75rem;
 }

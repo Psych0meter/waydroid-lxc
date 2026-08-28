@@ -86,7 +86,8 @@
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  // Collapses #map-body (see app.css) to just the header row, for
+  // Collapses #location-body (see app.css) - map, address search,
+  // coordinates, and favorites alike - to just the header row, for
   // screen space when you're not actively picking a location. Persisted
   // across reloads the same way the API key is.
   const mapPanel = document.getElementById("map-panel");
