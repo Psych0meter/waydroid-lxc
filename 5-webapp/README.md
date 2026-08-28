@@ -89,7 +89,7 @@ curl -X POST http://127.0.0.1:8088/api/screen/tap \
 
 curl -X POST http://127.0.0.1:8088/api/screen/swipe \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
-  -d '{"start_x": 500, "start_y": 1500, "end_x": 500, "end_y": 400, "duration_ms": 300}'
+  -d '{"x1": 500, "y1": 1500, "x2": 500, "y2": 400, "duration_ms": 300}'
 
 curl -X POST http://127.0.0.1:8088/api/screen/text \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \

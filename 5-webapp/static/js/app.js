@@ -349,9 +349,30 @@
     };
   }
 
+  // Browsers treat an <img> as natively draggable: without this, a
+  // pointerdown-then-move on the screen image starts the browser's own
+  // "drag this image" gesture instead of our swipe tracking, which fires
+  // a 'dragstart' and then 'pointercancel' partway through the drag - so
+  // 'pointerup' never arrives and the swipe is silently dropped (taps
+  // still work, since a plain click never crosses the drag threshold,
+  // which is what made this easy to miss). Belt-and-suspenders: the
+  // 'draggable' attribute alone isn't always enough (varies by browser),
+  // so 'dragstart' is also preventDefault()'d directly.
+  screenImg.draggable = false;
+  screenImg.addEventListener("dragstart", (event) => event.preventDefault());
+
   screenImg.addEventListener("pointerdown", (event) => {
     if (!screenPolling) return;
     dragStart = toDeviceCoords(event);
+    // Pointer capture keeps pointermove/pointerup targeting this element
+    // even if the drag ends up outside its bounds (e.g. a fast swipe that
+    // overshoots the image edge) - without it, pointerup can land on a
+    // different element (or the document) and never reach this listener.
+    screenImg.setPointerCapture(event.pointerId);
+  });
+
+  screenImg.addEventListener("pointercancel", () => {
+    dragStart = null;
   });
 
   screenImg.addEventListener("pointerup", async (event) => {

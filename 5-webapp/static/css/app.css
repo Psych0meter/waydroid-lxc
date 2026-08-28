@@ -223,6 +223,12 @@ dialog form { gap: 0.6rem; }
   height: auto;
   cursor: crosshair;
   touch-action: none;
+  /* Stop the browser's native "drag this image" gesture from hijacking
+     swipes - it would otherwise fire dragstart/pointercancel partway
+     through a drag and swallow the pointerup our JS needs. */
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
   display: none; /* shown once a screenshot has actually loaded */
 }
 
