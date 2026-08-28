@@ -36,26 +36,28 @@ Environment variables (all optional, all re-runnable):
 
 ## Using it
 
-Open the UI (see the URL `install-webapp.sh` prints), click "API key" and
-paste in the key it printed (also readable afterwards at
-`/etc/waydroid-webapp/api-token` on the container), then either click a
-point on the map, drag the marker, or search an address - "Set location"
-calls `change-location.sh` with the resulting coordinates. "Save
-favorite" saves whatever's currently in the coordinate fields under a
-name of your choice; the favorites list below it filters as you type and
-each entry re-applies its saved location with one click.
+Open the UI (see the URL `install-webapp.sh` prints) and click "API key"
+to paste in the key it printed (also readable afterwards at
+`/etc/waydroid-webapp/api-token` on the container).
 
-The "Screen" panel below the map gives you a live view of the device:
-click "Start screen" to begin polling screenshots over adb, click/drag on
-the image to tap or swipe (drag distance under 15px counts as a tap), use
-the text field or the Back/Home/Recents buttons to send input, or click
-the image once and just type on your own keyboard - it forwards
-keystrokes directly (letters/digits/punctuation as typed text, plus
+The "Screen" panel at the top gives you a live view of the device: click
+"Start screen" to begin polling screenshots over adb, click/drag on the
+image to tap or swipe (drag distance under 15px counts as a tap), use the
+text field or the Back/Home/Recents buttons to send input, or click the
+image once and just type on your own keyboard - it forwards keystrokes
+directly (letters/digits/punctuation as typed text, plus
 Backspace/Enter/Tab/Escape/Delete/arrows/Space as proper key events) to
 whatever's focused on the device, the same as a keyboard plugged into it.
 The image shows a highlighted border while it has this keyboard focus;
 click anywhere else to release it back to normal page navigation. See
 "Screen: remote control" below for how both of these work.
+
+Below it, the "Location" panel controls GPS mock-location: click a point
+on the map, drag the marker, or search an address - "Set location" calls
+`change-location.sh` with the resulting coordinates. "Save favorite"
+saves whatever's currently in the coordinate fields under a name of your
+choice; the favorites list below it filters as you type and each entry
+re-applies its saved location with one click.
 
 The refresh rate is adaptive by default: it automatically speeds up to
 4 polls/second for a few seconds after each tap/swipe/key/text, then
@@ -186,13 +188,10 @@ etc.) instead of duplicating logic.
 
 ## Screen: remote control
 
-An earlier version of this repo screen-shared the container's Wayland
-output over `wayvnc`/noVNC, fronted by nginx so it shared a port with
-this webapp. That's gone: `actions/screen.py` talks to the device
-directly over adb via the `adbutils` Python library instead, so there's
-no separate screen-sharing service, no nginx gateway, and no unauthenticated
-VNC view to worry about (every screen action goes through the same
-API-key-gated routes as everything else).
+`actions/screen.py` talks to the device directly over adb via the
+`adbutils` Python library - no separate screen-sharing service, no
+reverse-proxy gateway, and no unauthenticated view: every screen action
+goes through the same API-key-gated routes as everything else.
 
 * `GET /api/screen/screenshot` calls `AdbDevice.screenshot()` (adbutils
   wraps `adb exec-out screencap`) and returns the PNG bytes directly. The
@@ -243,8 +242,7 @@ API-key-gated routes as everything else).
 
 adbutils itself is pure Python, but it shells out to the real `adb`
 binary to start the local adb server if one isn't already running -
-that's why `install-webapp.sh` still installs the `adb` apt package
-even though the webapp no longer needs `websockify`/`novnc`.
+that's why `install-webapp.sh` also installs the `adb` apt package.
 
 ## Security
 
@@ -257,9 +255,7 @@ of this repo (see the top-level README's "Security" section):
   address - and `GET /api/screen/screenshot`, which shows whatever is on
   the device's screen) requires a random per-deployment token
   (`X-API-Key` header or `?api_key=` query param), generated on first run
-  and stored at `/etc/waydroid-webapp/api-token` (mode 600). This is a
-  security *improvement* over the old noVNC-based setup, where the
-  remote screen had no authentication of its own at all - now the screen
+  and stored at `/etc/waydroid-webapp/api-token` (mode 600) - the screen
   view is gated exactly like every other action. There's still no rate
   limiting or key rotation - treat the key like a password, and
   regenerate it by deleting that file and restarting the service if it
@@ -275,8 +271,7 @@ of this repo (see the top-level README's "Security" section):
   loading the page alone can't control the device.
 * **Bound to 127.0.0.1 by default** - use an SSH tunnel
   (`ssh -L 8088:127.0.0.1:8088 ...`) unless `WEBAPP_EXPOSE_LAN=yes` was
-  passed. Since there's no separate screen-sharing service anymore, this
-  one bind is the entire external attack surface.
+  passed. This one bind is the entire external attack surface.
 * **adb itself has no authentication once `ro.adb.secure=0` is set**
   (`4-waydroid-tools/enable-adb.sh`, applied by default) - but adbutils
   connects to the container's local adb server (`127.0.0.1:5037`), which

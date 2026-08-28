@@ -112,8 +112,6 @@ a VPN (the VPN then acts as the security perimeter):
 
 then, from a machine connected to the VPN: `http://<LXC_IP>:8088/`
 
-Unlike `EXPOSE_LAN` in an earlier version of this repo (which controlled
-an unauthenticated noVNC bridge and preserved its mode across re-runs),
 `WEBAPP_EXPOSE_LAN` always defaults to tunnel-only on every run, including
 a re-run against an existing deployment - it does not preserve a prior
 `--webapp-expose-lan`. Pass it again explicitly to keep the webapp exposed.
@@ -141,15 +139,8 @@ container needs *some* compositor present for SurfaceFlinger to render
 through (see `waydroid-session.service`'s `Requires=`), even though
 nothing displays its output directly - the webapp captures frames via
 `adb shell screencap`/adbutils instead of reading the compositor's output.
-Sway was originally chosen here because an earlier version of this repo
-also ran `wayvnc` (a wlroots-only VNC server) directly on top of it for
-screen sharing - `wayvnc` depends on wlroots-specific protocols
-(`zwlr_virtual_pointer_manager_v1`, an `xdg-output` revision Weston
-doesn't implement) and fails to start under Weston. `wayvnc`/noVNC have
-since been removed in favor of the webapp's adb-based screen control (see
-`5-webapp/README.md`), but Sway remains a well-documented, low-overhead
-choice for running Waydroid headless, so there was no reason to switch
-compositors when that changed.
+Sway is a well-documented, low-overhead choice for running Waydroid
+headless.
 
 ## Known limitations
 
@@ -178,12 +169,11 @@ rebuilding a kernel module:
 * **Webapp: every action, including the screen view, is API-key-gated**
   (`5-webapp/`, installed by default): by design, this repo binds it to
   `127.0.0.1` and recommends an SSH tunnel. `--webapp-expose-lan` /
-  `WEBAPP_EXPOSE_LAN=yes` lifts that restriction, but unlike the
-  unauthenticated noVNC bridge an earlier version of this repo used,
-  **every** webapp action - including fetching a screenshot or sending a
-  tap - requires the per-deployment API key, so exposing it on the LAN
-  means trusting that key like a password, not handing out an open view.
-  See `5-webapp/README.md`'s "Security" section for the full breakdown
+  `WEBAPP_EXPOSE_LAN=yes` lifts that restriction, but **every** webapp
+  action - including fetching a screenshot or sending a tap - requires the
+  per-deployment API key, so exposing it on the LAN means trusting that
+  key like a password, not handing out an open view. See
+  `5-webapp/README.md`'s "Security" section for the full breakdown
   (favorites stored in plain JSON, Nominatim as a third-party geocoding
   dependency, etc.).
 * **Unsigned third-party tool, applied automatically**

@@ -49,12 +49,10 @@ SETUP_GPS="yes"
 # Installs the GPS control + screen-control webapp (5-webapp/) automatically
 # - pass --skip-webapp to leave it for later via 5-webapp/install-webapp.sh.
 INSTALL_WEBAPP="yes"
-# This is the ONLY external-exposure switch left in this script - there's
-# no separate noVNC/wayvnc to toggle anymore (see 5-webapp/README.md,
-# "Screen: remote control"). Defaults to a fixed "no" (not "preserve
-# current setting" the way the old EXPOSE_LAN worked) - a from-scratch
-# deploy should come up tunnel-only unless asked otherwise.
-# --webapp-expose-lan / --no-webapp-expose-lan force an explicit value.
+# The webapp's only external-exposure switch (see 5-webapp/README.md,
+# "Security"). Defaults to "no" - a from-scratch deploy comes up
+# tunnel-only unless asked otherwise. --webapp-expose-lan /
+# --no-webapp-expose-lan force an explicit value.
 WEBAPP_EXPOSE_LAN="no"
 
 while [[ $# -gt 0 ]]; do
@@ -92,9 +90,9 @@ while [[ $# -gt 0 ]]; do
       echo "  --webapp-expose-lan   Expose the webapp on 0.0.0.0 - every action still requires its"
       echo "                        API key, but treat the key like a password on an open network."
       echo "  --no-webapp-expose-lan  Force tunnel-only webapp access (the default)."
-      echo "  Unlike some older flags this repo used to have for noVNC, this always defaults to"
-      echo "  tunnel-only on every run, including a re-run against an existing deployment - it does"
-      echo "  not preserve a prior --webapp-expose-lan. Pass it again explicitly to keep it exposed."
+      echo "  This always defaults to tunnel-only on every run, including a re-run against an"
+      echo "  existing deployment - it does not preserve a prior --webapp-expose-lan. Pass it"
+      echo "  again explicitly to keep it exposed."
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;

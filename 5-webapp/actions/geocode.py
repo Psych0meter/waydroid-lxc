@@ -1,17 +1,10 @@
 """
 Address -> coordinates lookup, via OpenStreetMap's Nominatim search API.
-
-No API key needed (unlike Google's geocoder, which would require billing
-setup), which fits this repo's existing preference for unkeyed, no-signup
-tools. Nominatim's public instance has a strict usage policy though: at
-most ~1 request/second, a descriptive User-Agent identifying the calling
-application, and no heavy/automated use - fine for a human clicking
-"search" in this webapp occasionally, not for bulk geocoding. See
-https://operations.osmfoundation.org/policies/nominatim/. Proxying the
-request through this backend (rather than calling Nominatim directly from
-the browser) keeps that User-Agent and any future API-key swap
-server-side, and is what protects nominatim.openstreetmap.org from a
-misbehaving client hammering it directly.
+No API key needed. Nominatim's public instance has a strict usage policy
+(~1 request/second, descriptive User-Agent, no bulk use) - see
+https://operations.osmfoundation.org/policies/nominatim/. Proxied through
+this backend, not called directly from the browser, so the User-Agent
+and any future API key swap stay server-side.
 """
 from __future__ import annotations
 

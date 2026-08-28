@@ -3,19 +3,15 @@
 #
 # Installs the webapp: a Python venv with Flask/gunicorn/requests/adbutils,
 # a vendored (no CDN, no API key) copy of Leaflet for the map UI, and the
-# waydroid-webapp systemd service, bound directly to WEBAPP_HOST:WEBAPP_PORT
-# (no reverse proxy in front of it - see README "Screen: remote control"
-# for why there's no separate noVNC/nginx stack to unify anymore: the
-# webapp talks to the device directly over adb via the adbutils Python
-# library instead of screen-sharing a VNC session).
+# waydroid-webapp systemd service, bound directly to WEBAPP_HOST:WEBAPP_PORT.
+# The webapp talks to the device directly over adb (adbutils), so no
+# reverse proxy or VNC session is needed in front of it.
 #
 # Usage: WEBAPP_EXPOSE_LAN=yes ./install-webapp.sh
 #   WEBAPP_EXPOSE_LAN   yes/no - binds 0.0.0.0 instead of 127.0.0.1. Left
 #                       unset, a re-run PRESERVES whichever mode is
-#                       already configured (mirrors
-#                       3-services/02-install-services.sh's old EXPOSE_LAN
-#                       handling for novnc.service), defaulting to "no"
-#                       only when there's nothing to preserve.
+#                       already configured, defaulting to "no" only when
+#                       there's nothing to preserve.
 #   WEBAPP_PORT         TCP port (default 8088).
 #   WAYDROID_TOOLS_DIR  Where change-location.sh lives (default matches a
 #                       standard 0-deploy-all.sh deployment).
@@ -62,12 +58,10 @@ for img in marker-icon.png marker-icon-2x.png marker-shadow.png; do
   fetch "https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/images/${img}" "${VENDOR_DIR}/images/${img}"
 done
 
-# WEBAPP_EXPOSE_LAN semantics mirror the old novnc.service EXPOSE_LAN
-# handling (3-services/02-install-services.sh, before wayvnc/noVNC were
-# removed): an explicit value always wins; left unset, preserve whatever
-# is already configured (checking webapp.env's own prior bind address)
-# rather than silently reverting an exposed deployment on an unrelated
-# re-run; default to "no" only when there's nothing to preserve.
+# An explicit value always wins; left unset, preserve whatever is already
+# configured (checking webapp.env's own prior bind address) rather than
+# silently reverting an exposed deployment on an unrelated re-run;
+# default to "no" only when there's nothing to preserve.
 if [[ -z "${WEBAPP_EXPOSE_LAN:-}" ]]; then
   if [[ -f "${ENV_FILE}" ]] && grep -q '^WEBAPP_HOST=0\.0\.0\.0$' "${ENV_FILE}"; then
     WEBAPP_EXPOSE_LAN="yes"
@@ -106,9 +100,7 @@ systemctl enable waydroid-webapp
 # Unconditional restart, not 'enable --now': on a re-run against an
 # already-running service, --now alone is a no-op for units that are
 # already active, so a changed WEBAPP_EXPOSE_LAN/WEBAPP_PORT would
-# silently NOT take effect until something else restarted it - the same
-# class of bug 3-services/02-install-services.sh once had for its
-# EXPOSE_LAN/novnc.service (see docs/DEBUGGING_AND_TESTS.md, Phase 6).
+# silently NOT take effect until something else restarted it.
 systemctl restart waydroid-webapp
 
 echo "Waiting for the API token to be generated..."

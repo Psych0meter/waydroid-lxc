@@ -1,21 +1,14 @@
 """
-Named "favorite" GPS locations: save a point once (from wherever it came
-from - a map click, an address search, or manual coordinates), then
-re-apply it later by clicking its name instead of re-entering
-coordinates.
+Named "favorite" GPS locations: save a point once, then re-apply it
+later without re-entering coordinates.
 
-Applying a favorite is not a separate mechanism - it just calls
-actions.gps.set_location() with the favorite's saved coordinates, the
-same call the map/coordinate form makes. This is the first example of
-one action composing another (see "Adding a new action" in README.md);
-favorites don't know anything about change-location.sh directly.
+apply_favorite() composes actions.gps.set_location() rather than talking
+to change-location.sh directly (see "Adding a new action" in README.md).
 
-Stored as a single JSON file rather than a real database - this is a
-personal-use bookmark list, not something that needs one. Every
-read-modify-write is done under an exclusive flock on a sibling lock
-file, and writes are atomic (write-to-temp + os.replace), so gunicorn's
-multiple worker processes (see waydroid-webapp.service) can't corrupt or
-lose an entry racing each other.
+Stored as a single JSON file. Every read-modify-write is done under an
+exclusive flock on a sibling lock file, and writes are atomic
+(write-to-temp + os.replace), so gunicorn's multiple worker processes
+can't corrupt or lose an entry racing each other.
 """
 from __future__ import annotations
 
@@ -96,13 +89,7 @@ def _validate_name(name: object) -> str:
 
 
 def list_favorites(query: object = None) -> ActionResult:
-    """
-    Lists all favorites, optionally filtered by a case-insensitive
-    substring match on name. Filtering is also done client-side in the
-    UI (see static/js/app.js) for instant results as you type without a
-    round trip per keystroke; the `query` param here exists so the API
-    itself is directly useful too (e.g. `curl .../list?q=paris`).
-    """
+    """Lists all favorites, optionally filtered by a substring match on name."""
     with _locked():
         favorites = _read_all_locked()
     if query:
@@ -119,16 +106,8 @@ def list_favorites(query: object = None) -> ActionResult:
 def save_favorite(
     name: object, latitude: object, longitude: object, altitude: object = 35.0
 ) -> ActionResult:
-    """
-    Saves a new favorite. Names aren't required to be unique (a plain
-    bookmark list, not a keyed store) - duplicates are a minor UX
-    wrinkle at worst, not a data-integrity problem, since every favorite
-    is addressed by its own generated id everywhere else (apply/delete).
-    """
+    """Saves a new favorite. Names aren't required to be unique."""
     validated_name = _validate_name(name)
-    # Reused from actions/gps.py's own validation rather than
-    # duplicating the range checks, so a favorite can never be saved
-    # with coordinates set_location() would later reject when applied.
     lat = validate_number(latitude, "latitude", -90.0, 90.0)
     lng = validate_number(longitude, "longitude", -180.0, 180.0)
     alt = validate_number(altitude, "altitude", -1000.0, 100_000.0)
@@ -163,11 +142,7 @@ def delete_favorite(favorite_id: object) -> ActionResult:
 
 
 def apply_favorite(favorite_id: object) -> ActionResult:
-    """
-    Looks up a favorite by id and sets it as the current mock location -
-    the actual point of a "favorite": one click to re-apply a location
-    you use often, not just a way to remember coordinates.
-    """
+    """Looks up a favorite by id and sets it as the current mock location."""
     if not isinstance(favorite_id, str) or not favorite_id:
         raise ActionError("favorite id must be a non-empty string.")
     with _locked():

@@ -1,17 +1,9 @@
 """
 Minimal API-key auth for the /api/* routes.
 
-This app can execute real Android actions (currently GPS, potentially
-more later - see actions/) and store data worth keeping private (saved
-favorite locations can be real addresses), so unlike a read-only status
-page it shouldn't be reachable by anyone who can merely route a packet
-to it. Rather than a full user/session system, every route that mutates
-device state or could expose something private requires a per-deployment
-random token, generated on first run and stored on disk (mode 600) - the
-same "one bearer secret, no accounts" trade-off already used elsewhere
-in this repo's spirit of documented, minimal-friction security (see
-README "Security"). The token is printed by install-webapp.sh and
-readable afterwards at TOKEN_FILE.
+Every route that mutates device state or exposes private data (saved
+favorites, screenshots) requires a per-deployment random token, generated
+on first run and stored on disk (mode 600). See README, "Security".
 """
 from __future__ import annotations
 
@@ -47,11 +39,8 @@ API_TOKEN = load_or_create_token()
 
 def require_api_key(view: Callable) -> Callable:
     """
-    Decorator for routes that mutate device state. Accepts the token via
-    an 'X-API-Key' header (preferred) or an 'api_key' query parameter
-    (convenience for quick curl testing) - the bundled web UI stores the
-    key in the browser's localStorage after it's entered once and sends
-    it as a header on every request.
+    Requires a valid token via the 'X-API-Key' header (used by the web
+    UI) or an 'api_key' query parameter (for quick curl testing).
     """
 
     @wraps(view)

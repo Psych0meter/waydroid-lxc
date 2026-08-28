@@ -36,10 +36,7 @@ systemctl daemon-reload
 
 # 'restart', not 'enable --now': on a re-run against an already-running
 # sway.service, --now alone is a no-op for units that are already active,
-# so a changed config wouldn't take effect until something else restarted
-# it - the same class of bug this repo's old EXPOSE_LAN handling hit for
-# novnc.service (see docs/DEBUGGING_AND_TESTS.md, Phase 6) before noVNC
-# was removed.
+# so a changed config wouldn't take effect until something else restarted it.
 systemctl enable sway waydroid-container.service
 systemctl restart sway waydroid-container.service
 

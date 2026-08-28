@@ -1,10 +1,7 @@
 """
 GPS mock-location action: a thin, validated wrapper around
-4-waydroid-tools/change-location.sh (see that script and
-docs/DEBUGGING_AND_TESTS.md, Phase 5, for how the underlying mechanism
-works and its known limitations - notably that Google Maps needs to be
-restarted to visually pick up a large jump, which this module can't do
-anything about since it's a Maps UI quirk, not a location-pipeline bug).
+4-waydroid-tools/change-location.sh. See that script and
+docs/DEBUGGING_AND_TESTS.md for the underlying mechanism.
 """
 from __future__ import annotations
 

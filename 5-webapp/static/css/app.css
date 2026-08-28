@@ -42,6 +42,15 @@ main {
 
 #map-panel { display: flex; flex-direction: column; gap: 0.5rem; }
 
+.section-heading {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 600;
+}
+
 #map {
   height: 60vh;
   min-height: 320px;
@@ -127,15 +136,6 @@ dialog form { gap: 0.6rem; }
   padding-top: 0.75rem;
 }
 
-#favorites-panel h2 {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  margin: 0;
-  font-weight: 600;
-}
-
 #favorites-list {
   list-style: none;
   margin: 0;
@@ -198,15 +198,6 @@ dialog form { gap: 0.6rem; }
   justify-content: space-between;
 }
 
-#screen-header h2 {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  margin: 0;
-  font-weight: 600;
-}
-
 #screen-refresh-control {
   display: flex;
   align-items: center;
@@ -251,19 +242,15 @@ dialog form { gap: 0.6rem; }
   height: auto;
   cursor: crosshair;
   touch-action: none;
-  /* Stop the browser's native "drag this image" gesture from hijacking
-     swipes - it would otherwise fire dragstart/pointercancel partway
-     through a drag and swallow the pointerup our JS needs. */
-  -webkit-user-drag: none;
+  -webkit-user-drag: none; /* disable native image drag, which breaks swipe */
   user-select: none;
   -webkit-user-select: none;
-  display: none; /* shown once a screenshot has actually loaded */
+  display: none; /* shown once a screenshot has loaded */
 }
 
 #screen-img[src] { display: block; }
 
-/* Visible sign that keyboard input typed here is being forwarded to the
-   device (click the image to focus it, click elsewhere to release). */
+/* Indicates keyboard focus - keystrokes are forwarded to the device. */
 #screen-img:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;

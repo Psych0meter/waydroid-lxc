@@ -66,11 +66,6 @@ in.
   (Android still booting, or `adb devices` shows nothing/`unauthorized`;
   see Phase 5's adb troubleshooting, which the webapp's `actions/screen.py`
   hits the same way `change-location.sh` does).
-* This replaces an earlier version of this repo's `wayvnc`/`novnc`-based
-  screen sharing (see git history if you need to debug an old deployment
-  that still runs it) - the webapp now talks to the device directly over
-  adb instead of reading Sway's compositor output, so there's no separate
-  VNC service to check here anymore.
 
 ## Phase 3: Verify Waydroid Session
 **Test:** Is waydroid-container.service (provided by the waydroid package) active?
@@ -213,8 +208,8 @@ phase is for verifying it took effect, or for re-applying/rolling it back
 by hand afterwards.
 
 `spoof-device.sh` (Quackdoc/waydroid-scripts) applies a single fixed
-Pixel 5 profile - there is no menu or profile choice, despite what older
-instructions may say. It works by **appending** `ro.product.*`/
+Pixel 5 profile - there is no menu or profile choice. It works by
+**appending** `ro.product.*`/
 `ro.build.*` lines to `/var/lib/waydroid/waydroid_base.prop`. That file is
 only read when Waydroid mounts the Android rootfs, which happens when the
 underlying **container** (`waydroid-container.service`, from the waydroid
@@ -251,16 +246,15 @@ genuinely clean slate in that case, re-run `waydroid init -f` instead.
 
 * **Known issue**: device still reports as generic "WayDroid x86_64"
   after applying a spoof, with no error printed. Two independent causes,
-  both handled by `apply-spoof.sh`/`03-setup-tools.sh` (as of this repo's
-  current version) but worth knowing about if you deployed an older copy
-  or a hand-downloaded script:
+  both handled by `apply-spoof.sh`/`03-setup-tools.sh` but worth knowing
+  about if you're using a hand-downloaded copy of `spoof-device.sh`:
   - `sudo: command not found` on every line of the script's output: the
     upstream script unconditionally shells out to `sudo`, which isn't
     installed in this minimal container (everything here already runs as
     root, so elevation isn't actually needed). Since the script has no
     `set -e`, it still exits 0 with **none** of the properties actually
-    written - `03-setup-tools.sh` now strips the `sudo ` prefix right after
-    downloading it, so this shouldn't reoccur; if you hit it anyway, either
+    written - `03-setup-tools.sh` strips the `sudo ` prefix right after
+    downloading it, so this shouldn't occur; if you hit it anyway, either
     `apt-get install -y sudo` or edit your local copy of `spoof-device.sh`
     to drop the `sudo ` prefix.
   - Only restarting `waydroid-session` (step 2-4 above) instead of also
@@ -293,26 +287,19 @@ talking directly to that IP, not `waydroid adb`. `setup-gps.sh` and
 `change-location.sh` both install `adb` (via `apt-get install -y adb`) if
 it's missing, call `waydroid adb connect` in a retry loop first (the
 container's IP can change across restarts, and reconnecting when already
-connected is harmless), then use plain `adb` for everything else. An
-earlier version of these scripts (before this was discovered) tried
-`waydroid adb devices`/`install`/`shell` directly and failed outright -
-if you deployed that version, re-run `03-setup-tools.sh` and
-`setup-gps.sh` to pick up the fix.
+connected is harmless), then use plain `adb` for everything else.
 
-**This replaces an earlier, broken approach.** A previous version of this
-repo set Waydroid's own `persist.waydroid.fake_gps` property directly
-(`waydroid prop set persist.waydroid.fake_gps "Fix,gps,<lat>,<lng>,..."`)
-without a download. The command always succeeded and even round-tripped
-correctly through `waydroid prop get` - but it never actually affected
-Android: a live `waydroid logcat` capture taken at the exact moment the
-property was set showed **zero** GNSS/location-provider log activity, and
-that property doesn't appear anywhere in Waydroid's own source
-(`waydroid/waydroid` on GitHub) or in any independent documentation. Best
-explanation: nothing in this Android image ever reads that property, so
-every "fix" silently went nowhere - which is exactly why the device
-reported "unknown"/no GPS despite the script reporting success every time.
-The Appium Settings app is the corrected, independently-verifiable
-replacement.
+**Why not Waydroid's own `persist.waydroid.fake_gps` property:** setting
+it directly (`waydroid prop set persist.waydroid.fake_gps
+"Fix,gps,<lat>,<lng>,..."`) always succeeds and even round-trips correctly
+through `waydroid prop get` - but it never actually affects Android: a
+live `waydroid logcat` capture taken at the exact moment the property was
+set shows **zero** GNSS/location-provider log activity, and that property
+doesn't appear anywhere in Waydroid's own source (`waydroid/waydroid` on
+GitHub) or in any independent documentation. Nothing in this Android image
+reads that property, so the device reports "unknown"/no GPS despite the
+command reporting success. The Appium Settings app, driven over real adb,
+is the verifiable alternative this repo uses instead.
 
 1. First-time setup (done automatically by `0-deploy-all.sh` unless
    `--skip-gps-setup` was passed): from `4-waydroid-tools/`, run
@@ -382,17 +369,6 @@ through Android's location stack.
   Like the Pixel 5 spoof, `ro.*` properties lock once Android has booted,
   so this only takes effect on the next **container** restart - see the
   hotfix commands below if you're fixing an already-deployed container.
-* **Known issue (legacy)**: `java.lang.NullPointerException` in
-  `SettingsProvider.mutateGlobalSetting` from a command like `waydroid
-  shell -- settings put global adb_enabled 1`. This came from an earlier
-  version of `setup-gps.sh` that tried to flip `adb_enabled` via `waydroid
-  shell` before realizing that command isn't attributed to a proper
-  "shell" UID the way real `adb shell` is, which trips a null
-  `getCallingPackage()` deep in `AppOpsService`. The current `setup-gps.sh`
-  no longer does this at all - network ADB doesn't need to be toggled by
-  hand, since `waydroid adb connect` already sets up an authenticated
-  connection to the device. If you still see this error, you're running
-  an old copy of the script.
 * **Known issue** `WayDroid session is stopped` (or `waydroid shell`
   silently doing nothing) from a plain root shell, even though
   `waydroid-session.service` is `active (running)`: this service runs its
@@ -417,19 +393,13 @@ just re-downloads `spoof-device.sh`. For an existing container, run them
 directly with `pct exec <CTID> -- ...` (see "Manual deployment" in the
 README) rather than through `0-deploy-all.sh`.
 
-**Historical note**: an earlier version of this repo had a `02-install-services.sh`-level
-`EXPOSE_LAN` toggle controlling `novnc.service`'s bind address, with a
-known bug where re-running the script without re-passing
-`--expose-lan`/`EXPOSE_LAN=yes` could silently revert an already-exposed
-deployment back to tunnel-only. `wayvnc`/noVNC have since been removed
-entirely (see `5-webapp/README.md`, "Screen: remote control") - the only
-exposure switch left in the whole repo is the webapp's own
-`WEBAPP_EXPOSE_LAN`, described next, which does **not** carry the old
-preserve-on-rerun behavior: `0-deploy-all.sh` always passes an explicit
-value (defaulting to `"no"`), so a plain re-run with no flag reverts to
-tunnel-only rather than preserving prior exposure. Run `install-webapp.sh`
-directly (not through `0-deploy-all.sh`) if you want the "preserve
-whatever's currently configured" behavior described below.
+**`WEBAPP_EXPOSE_LAN` and re-running `0-deploy-all.sh`**: the webapp's LAN
+exposure is the only exposure switch in the repo. `0-deploy-all.sh` always
+passes an explicit value for it (defaulting to `"no"`), so a plain re-run
+with no flag reverts the webapp to tunnel-only rather than preserving
+prior exposure. Run `install-webapp.sh` directly (not through
+`0-deploy-all.sh`) if you want the "preserve whatever's currently
+configured" behavior described below.
 
 **`0-deploy-all.sh --ctid <existing ID>` is not fully idempotent.**
 Only step 3 (LXC config injection) is actually idempotency-guarded - it
