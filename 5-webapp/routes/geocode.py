@@ -14,7 +14,7 @@ geocode_bp = Blueprint("geocode", __name__)
 def post_search():
     body = request.get_json(silent=True) or {}
     try:
-        result = geocode_address(body.get("address", ""))
+        result = geocode_address(body.get("address", ""), body.get("limit", 5))
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     return jsonify(result.to_dict())

@@ -3,15 +3,21 @@
 Two automated tools are available before working through the manual steps
 below:
 
-* `tests/lint.sh` - static, can run anywhere (dev machine, CI): `bash -n` on
-  every script, shellcheck, and checks that files referenced between
-  scripts actually exist. Doesn't need Proxmox.
+* `tests/lint.sh` - static, can run anywhere (dev machine, CI), no
+  Proxmox/container needed: `bash -n` and shellcheck on every shell
+  script, `systemd-analyze verify` (plus a manual key=value check) on
+  every `.service` unit including the webapp's rendered template,
+  cross-file path references between scripts, `py_compile` on every
+  Python file, and the full `5-webapp` unit test suite
+  (`python3 -m unittest discover`).
 * `tests/smoke-test.sh` - dynamic, run **inside the container** after
   deployment (`pct exec <CTID> -- bash
   /opt/waydroid-lxc-deploy/tests/smoke-test.sh` if deployed via
   `0-deploy-all.sh`, or directly `./tests/smoke-test.sh` from inside the
-  container): checks `/dev/binder`, installed binaries, systemd services,
-  the Wayland socket, listening ports, and the Waydroid session state.
+  container): checks `/dev/binder`/`/dev/loop*`/`/dev/fuse`, installed
+  packages, systemd services, the Wayland socket, listening ports, the
+  dedicated Waydroid D-Bus bus, a conflicting system `dnsmasq`, and the
+  Waydroid session state.
 
 If `smoke-test.sh` fails somewhere, follow the matching phase below to dig
 in.

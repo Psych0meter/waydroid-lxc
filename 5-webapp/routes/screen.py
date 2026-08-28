@@ -27,10 +27,10 @@ def get_screenshot():
 def post_tap():
     body = request.get_json(silent=True) or {}
     try:
-        tap(x=body.get("x"), y=body.get("y"))
+        result = tap(x=body.get("x"), y=body.get("y"))
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
-    return jsonify({"ok": True, "message": "Tapped."})
+    return jsonify(result.to_dict())
 
 
 @screen_bp.post("/swipe")
@@ -38,7 +38,7 @@ def post_tap():
 def post_swipe():
     body = request.get_json(silent=True) or {}
     try:
-        swipe(
+        result = swipe(
             x1=body.get("x1"),
             y1=body.get("y1"),
             x2=body.get("x2"),
@@ -47,7 +47,7 @@ def post_swipe():
         )
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
-    return jsonify({"ok": True, "message": "Swiped."})
+    return jsonify(result.to_dict())
 
 
 @screen_bp.post("/text")
@@ -55,10 +55,10 @@ def post_swipe():
 def post_text():
     body = request.get_json(silent=True) or {}
     try:
-        send_text(body.get("text"))
+        result = send_text(body.get("text"))
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
-    return jsonify({"ok": True, "message": "Text sent."})
+    return jsonify(result.to_dict())
 
 
 @screen_bp.post("/key")
@@ -66,7 +66,7 @@ def post_text():
 def post_key():
     body = request.get_json(silent=True) or {}
     try:
-        send_key(body.get("key"))
+        result = send_key(body.get("key"))
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
-    return jsonify({"ok": True, "message": "Key sent."})
+    return jsonify(result.to_dict())

@@ -15,7 +15,9 @@ at module level, above the imports it's guarding.
 """
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -50,6 +52,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module  # noqa: E402
 import auth  # noqa: E402
+import actions.gps as gps_module  # noqa: E402
 import actions.screen as screen_module  # noqa: E402
 import actions.update as update_module  # noqa: E402
 
@@ -156,11 +159,17 @@ class GpsTest(WebappTestCase):
             self.assertIn("--stop", f.read())
 
     def test_underlying_script_failure_is_400(self):
-        from actions.base import run_script
-        from actions.gps import CHANGE_LOCATION_SCRIPT
-
-        result = run_script([CHANGE_LOCATION_SCRIPT, "--fail"])
-        self.assertNotEqual(result.returncode, 0)
+        # change-location.sh's own --fail branch (see the fake script
+        # above) isn't reachable through the real /api/gps/set request
+        # shape (set_location() always calls it with coordinates, never
+        # "--fail") - mock run_script itself to simulate a failing
+        # script and confirm the route actually surfaces that as a 400,
+        # not just that run_script() can return a nonzero exit code.
+        failed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="boom")
+        with mock.patch.object(gps_module, "run_script", return_value=failed):
+            resp = self.post("/api/gps/set", {"latitude": 48.8584, "longitude": 2.2945})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("boom", resp.get_json()["message"])
 
 
 class GeocodeTest(WebappTestCase):
@@ -189,6 +198,18 @@ class GeocodeTest(WebappTestCase):
         with mock.patch("actions.geocode.requests.get", return_value=self._mock_response([])):
             resp = self.post("/api/geocode/search", {"address": "nowhere"})
             self.assertEqual(resp.status_code, 400)
+
+    def test_search_limit_is_passed_through_and_clamped(self):
+        with mock.patch("actions.geocode.requests.get", return_value=self._mock_response([])) as m:
+            self.post("/api/geocode/search", {"address": "Paris", "limit": 50})
+            _, kwargs = m.call_args
+            self.assertEqual(kwargs["params"]["limit"], 10)  # clamped to the [1, 10] range
+
+    def test_search_invalid_limit_falls_back_to_default(self):
+        with mock.patch("actions.geocode.requests.get", return_value=self._mock_response([])) as m:
+            self.post("/api/geocode/search", {"address": "Paris", "limit": "not-a-number"})
+            _, kwargs = m.call_args
+            self.assertEqual(kwargs["params"]["limit"], 5)
 
 
 class FavoritesTest(WebappTestCase):
@@ -258,6 +279,28 @@ class FavoritesTest(WebappTestCase):
         ids = {f["id"] for f in list_resp.get_json()["data"]["favorites"]}
         self.assertEqual(ids, {first["id"], second["id"]})
 
+    def test_malformed_entries_are_skipped_not_a_500(self):
+        # Regression test: favorites.json is schema-valid JSON but one
+        # entry is missing keys every caller indexes without a guard
+        # (e.g. hand-edited, or written by code from a future/older
+        # schema) - that entry should be silently dropped, not surface
+        # as an uncaught KeyError/500 the first time something lists,
+        # applies, or deletes favorites.
+        import actions.favorites as favorites_module
+
+        good = self._save(name="Good").get_json()["data"]["favorite"]
+        os.makedirs(favorites_module.DATA_DIR, exist_ok=True)
+        with open(favorites_module.DATA_FILE, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+        existing.append({"id": "broken", "name": "Missing coordinates"})  # no lat/lng/alt
+        with open(favorites_module.DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(existing, f)
+
+        list_resp = self.get("/api/favorites/list")
+        self.assertEqual(list_resp.status_code, 200)
+        ids = {f["id"] for f in list_resp.get_json()["data"]["favorites"]}
+        self.assertEqual(ids, {good["id"]})
+
 
 class ScreenTest(WebappTestCase):
     """
@@ -321,6 +364,16 @@ class ScreenTest(WebappTestCase):
         with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
             resp = self.post("/api/screen/tap", {"x": 5000, "y": 200})
         self.assertEqual(resp.status_code, 400)
+
+    def test_tap_rejects_coordinate_equal_to_width_or_height(self):
+        # Regression test: valid pixel coordinates are [0, width-1] /
+        # [0, height-1] - width/height themselves are one pixel past the
+        # last valid one in each dimension, and used to be accepted.
+        device = self._mock_device(width=1080, height=1920)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/tap", {"x": 1080, "y": 200})
+        self.assertEqual(resp.status_code, 400)
+        device.click.assert_not_called()
 
     def test_swipe_success(self):
         device = self._mock_device()

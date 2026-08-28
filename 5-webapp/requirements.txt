@@ -2,3 +2,7 @@ flask>=3.0
 requests>=2.31
 gunicorn>=21.2
 adbutils>=2.9
+# Used directly by tests/test_app.py to build a fake screenshot - also a
+# transitive dependency of adbutils, but listed explicitly since the
+# test suite imports it on its own behalf.
+Pillow>=10.0

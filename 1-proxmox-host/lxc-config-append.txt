@@ -1,4 +1,4 @@
-# APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
+# APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<CTID>.conf)
 # CRITICAL: the container must be PRIVILEGED (unprivileged = 0).
 #
 # SECURITY WARNING: disables AppArmor confinement, allows all cgroup

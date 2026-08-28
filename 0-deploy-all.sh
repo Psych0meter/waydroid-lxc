@@ -10,21 +10,21 @@
 # another from 4-waydroid-tools/device-profiles/, or --skip-spoof to
 # leave it unapplied) and always enabling headless adb authorization
 # (ro.adb.secure=0 - see 4-waydroid-tools/enable-adb.sh), then restarting
-# the container before
-# Waydroid's first boot, then - once the session is up - installing and
-# configuring the GPS mock-location app (pass --skip-gps-setup to leave
-# it downloaded but unconfigured) and the GPS control + screen-control
-# webapp (5-webapp/, pass --skip-webapp to leave it for later - see its
-# README for why there's no separate VNC service to also install: the
-# webapp talks to the device directly over adb).
+# the container before Waydroid's first boot, then - once the session is
+# up - installing and configuring the GPS mock-location app (pass
+# --skip-gps-setup to leave it downloaded but unconfigured) and the GPS
+# control + screen-control webapp (5-webapp/, pass --skip-webapp to leave
+# it for later - see its README for why there's no separate VNC service
+# to also install: the webapp talks to the device directly over adb).
 #
 # ct/debian.sh from community-scripts is normally interactive (whiptail);
 # this wrapper pre-fills its var_* environment variables to force
 # "Default Settings" mode. Run from a real console (not cron/CI) in case a
 # future version still shows a dialog.
 #
-# Usage:
-#   ./0-deploy-all.sh [--ctid ID] [--hostname NAME] [--ip dhcp|A.B.C.D/CIDR]
+# Usage: ./0-deploy-all.sh [options] - run with -h/--help for the full,
+# authoritative list of flags (kept there, not duplicated here, so it
+# can't drift out of sync with the argument parser below).
 #
 set -euo pipefail
 

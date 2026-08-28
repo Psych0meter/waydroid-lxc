@@ -26,12 +26,11 @@ This script:
    default; pass `--skip-spoof` to leave it unapplied, or `--device
    <profile>` / `--list-devices` to pick another - see
    `4-waydroid-tools/device-profiles/README.md`) and always enabling
-   headless adb authorization
-   (`4-waydroid-tools/enable-adb.sh`, needed for GPS mock-location and the
-   webapp's screen control to work without a human clicking an "Allow USB
-   debugging" popup), then restarting the container before Waydroid's
-   first boot, so About Phone already shows Pixel 5 the first time you
-   open it.
+   headless adb authorization (`4-waydroid-tools/enable-adb.sh`, needed
+   for GPS mock-location and the webapp's screen control to work without
+   a human clicking an "Allow USB debugging" popup), then restarting the
+   container before Waydroid's first boot, so About Phone already shows
+   Pixel 5 the first time you open it.
 5. Enables `waydroid-session.service` (auto-start on boot) and, once the
    session is up, installs and configures the GPS mock-location app
    automatically (pass `--skip-gps-setup` to leave it for later), then
@@ -63,7 +62,7 @@ the targeted commands).
 2. Create a **privileged** Debian 13 LXC from the Proxmox UI (or via
    `community-scripts/ProxmoxVE`).
 3. Append the contents of `1-proxmox-host/lxc-config-append.txt` (minus
-   comments) to `/etc/pve/lxc/<VMID>.conf`, then restart the container.
+   comments) to `/etc/pve/lxc/<CTID>.conf`, then restart the container.
 4. Inside the container: `2-lxc-setup/01-install-waydroid.sh`
 5. Then: `3-services/02-install-services.sh`
 6. Then: `4-waydroid-tools/03-setup-tools.sh`
@@ -123,7 +122,8 @@ a re-run against an existing deployment - it does not preserve a prior
 * `0-deploy-all.sh` - Full orchestrator (host -> container -> services).
 * `1-proxmox-host/` - Scripts/config applied on the Proxmox host.
 * `2-lxc-setup/` - Installs Waydroid and its dependencies in the container.
-* `3-services/` - systemd units (Sway headless compositor, Waydroid session).
+* `3-services/` - systemd units (Sway headless compositor, Waydroid session)
+  and their runtime helper scripts, installed by `02-install-services.sh`.
 * `4-waydroid-tools/` - Device spoofing, GPS, manual startup wrapper, Play
   Store emulated-storage workaround.
 * `5-webapp/` - Flask webapp/API for GPS control (map UI, favorites) and
@@ -180,8 +180,9 @@ rebuilding a kernel module:
   (favorites stored in plain JSON, Nominatim as a third-party geocoding
   dependency, etc.).
 * **Device identity spoofing, applied automatically** (`4-waydroid-tools/apply-spoof.sh`
-  + `device-profiles/`): appends a fixed block of `ro.product.*`/`ro.build.*`
-  properties to `waydroid_base.prop` so About Phone reports a real device
+  + `device-profiles/`): appends a fixed block of `ro.product.*`, `ro.build.*`,
+  and related `ro.*` build properties (system/vendor/odm/bootimage) to
+  `waydroid_base.prop` so About Phone reports a real device
   instead of "WayDroid x86_64" - by default, Pixel 5 (`--skip-spoof` to
   leave it unapplied). The property values are vendored in this repo
   (`4-waydroid-tools/device-profiles/pixel-5.prop`), not downloaded at

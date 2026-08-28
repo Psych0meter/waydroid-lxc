@@ -48,18 +48,36 @@ def _locked() -> Iterator[None]:
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
+_REQUIRED_FAVORITE_KEYS = ("id", "name", "latitude", "longitude", "altitude")
+
+
 def _read_all_locked() -> list[dict[str, Any]]:
-    """Must be called from inside a `with _locked():` block."""
+    """
+    Must be called from inside a `with _locked():` block. Every caller
+    downstream (list/save/delete/apply_favorite) indexes favorites by
+    key (f["name"], f["id"], ...) without guarding each lookup, so this
+    is the one place that filters out anything that isn't shaped like a
+    favorite this code actually wrote - a hand-edited or
+    partially-written favorites.json shouldn't turn into an uncaught
+    KeyError (500) somewhere downstream instead of just being skipped,
+    the same spirit as a fully corrupted file being treated as empty
+    rather than raising.
+    """
     if not os.path.exists(DATA_FILE):
         return []
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
-        return json.loads(content) if content else []
+        parsed = json.loads(content) if content else []
     except (json.JSONDecodeError, OSError):
-        # A corrupted file shouldn't take down the whole feature - treat
-        # it as empty rather than raising, same spirit as returning [].
         return []
+    if not isinstance(parsed, list):
+        return []
+    return [
+        entry
+        for entry in parsed
+        if isinstance(entry, dict) and all(key in entry for key in _REQUIRED_FAVORITE_KEYS)
+    ]
 
 
 def _write_all_locked(favorites: list[dict[str, Any]]) -> None:
@@ -130,6 +148,7 @@ def save_favorite(
 
 
 def delete_favorite(favorite_id: object) -> ActionResult:
+    """Deletes the favorite with the given id. Raises ActionError if none matches."""
     if not isinstance(favorite_id, str) or not favorite_id:
         raise ActionError("favorite id must be a non-empty string.")
     with _locked():

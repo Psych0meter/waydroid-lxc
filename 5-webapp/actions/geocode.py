@@ -18,7 +18,14 @@ _REQUEST_TIMEOUT = 10
 _MAX_ADDRESS_LENGTH = 500
 
 
-def geocode_address(address: object, limit: int = 5) -> ActionResult:
+def geocode_address(address: object, limit: object = 5) -> ActionResult:
+    """
+    Looks up `address` via Nominatim and returns up to `limit` (clamped
+    to [1, 10]) matches, closest guess first. Never raises on a bad
+    `limit` - it's a minor convenience knob, not user input worth a 400
+    over, so anything that doesn't parse as an int just falls back to
+    the default.
+    """
     if not isinstance(address, str):
         raise ActionError("address must be a string.")
     address = address.strip()
@@ -26,6 +33,10 @@ def geocode_address(address: object, limit: int = 5) -> ActionResult:
         raise ActionError("address must not be empty.")
     if len(address) > _MAX_ADDRESS_LENGTH:
         raise ActionError(f"address must be at most {_MAX_ADDRESS_LENGTH} characters.")
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 5
 
     try:
         response = requests.get(

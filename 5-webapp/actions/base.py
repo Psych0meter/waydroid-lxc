@@ -42,7 +42,7 @@ def validate_number(value: object, name: str, lo: float, hi: float) -> float:
     if isinstance(value, bool) or value is None:
         raise ActionError(f"{name} is required and must be a number.")
     try:
-        parsed = float(value)  # type: ignore[arg-type]
+        parsed = float(value)
     except (TypeError, ValueError):
         raise ActionError(f"{name} must be a number, got: {value!r}") from None
     if not (lo <= parsed <= hi):

@@ -13,7 +13,7 @@ import subprocess
 
 import adbutils
 
-from .base import ActionError, validate_number
+from .base import ActionError, ActionResult, validate_number
 
 _ADB_TIMEOUT = 10  # seconds - reconnect/status calls should be fast; screen actions use adbutils' own defaults
 
@@ -55,7 +55,7 @@ def _reconnect() -> None:
         pass
 
 
-def _device() -> "adbutils.AdbDevice":
+def _device() -> adbutils.AdbDevice:
     """
     Returns the single connected adb device, reconnecting once if none is
     immediately visible. Raises ActionError, not adbutils.AdbError, so
@@ -86,7 +86,7 @@ def _device() -> "adbutils.AdbDevice":
     return devices[0]
 
 
-def _screen_size(device: "adbutils.AdbDevice") -> tuple[int, int]:
+def _screen_size(device: adbutils.AdbDevice) -> tuple[int, int]:
     try:
         size = device.window_size()
     except adbutils.AdbError as exc:
@@ -106,34 +106,38 @@ def screenshot() -> bytes:
     return buf.getvalue()
 
 
-def tap(x: object, y: object) -> None:
+def tap(x: object, y: object) -> ActionResult:
     """Simulates a tap at device pixel coordinates (x, y)."""
     device = _device()
     width, height = _screen_size(device)
-    xi = int(validate_number(x, "x", 0, width))
-    yi = int(validate_number(y, "y", 0, height))
+    # Valid pixel coordinates are [0, width-1] / [0, height-1] - width/height
+    # themselves are one past the last valid pixel in each dimension.
+    xi = int(validate_number(x, "x", 0, width - 1))
+    yi = int(validate_number(y, "y", 0, height - 1))
     try:
         device.click(xi, yi)
     except adbutils.AdbError as exc:
         raise ActionError(f"Tap failed: {exc}") from exc
+    return ActionResult(ok=True, message="Tapped.")
 
 
-def swipe(x1: object, y1: object, x2: object, y2: object, duration_ms: object = 300) -> None:
+def swipe(x1: object, y1: object, x2: object, y2: object, duration_ms: object = 300) -> ActionResult:
     """Simulates a swipe/drag from (x1, y1) to (x2, y2) over duration_ms."""
     device = _device()
     width, height = _screen_size(device)
-    x1i = int(validate_number(x1, "x1", 0, width))
-    y1i = int(validate_number(y1, "y1", 0, height))
-    x2i = int(validate_number(x2, "x2", 0, width))
-    y2i = int(validate_number(y2, "y2", 0, height))
+    x1i = int(validate_number(x1, "x1", 0, width - 1))
+    y1i = int(validate_number(y1, "y1", 0, height - 1))
+    x2i = int(validate_number(x2, "x2", 0, width - 1))
+    y2i = int(validate_number(y2, "y2", 0, height - 1))
     duration_s = validate_number(duration_ms, "duration_ms", 50, 5000) / 1000.0
     try:
         device.swipe(x1i, y1i, x2i, y2i, duration=duration_s)
     except adbutils.AdbError as exc:
         raise ActionError(f"Swipe failed: {exc}") from exc
+    return ActionResult(ok=True, message="Swiped.")
 
 
-def send_text(text: object) -> None:
+def send_text(text: object) -> ActionResult:
     """
     Types `text` into whatever currently has focus (an Android EditText,
     a search box, ...) via 'input text' under the hood - there has to be
@@ -146,9 +150,10 @@ def send_text(text: object) -> None:
         device.send_keys(text)
     except adbutils.AdbError as exc:
         raise ActionError(f"Sending text failed: {exc}") from exc
+    return ActionResult(ok=True, message="Text sent.")
 
 
-def send_key(key: object) -> None:
+def send_key(key: object) -> ActionResult:
     """Sends a named key event - see _KEY_CODES for the supported names."""
     if not isinstance(key, str) or key.lower() not in _KEY_CODES:
         raise ActionError(f"key must be one of: {', '.join(sorted(_KEY_CODES))}")
@@ -157,3 +162,4 @@ def send_key(key: object) -> None:
         device.keyevent(_KEY_CODES[key.lower()])
     except adbutils.AdbError as exc:
         raise ActionError(f"Key event failed: {exc}") from exc
+    return ActionResult(ok=True, message="Key sent.")

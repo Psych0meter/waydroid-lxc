@@ -73,8 +73,8 @@ def apply_update() -> ActionResult:
     start a second run while one is already in progress (per
     STATUS_FILE), since two concurrent updates would race on the same
     backup directory - but only when that run's process (tracked by
-    pid, see _write_status below) is actually still alive. update.service's
-    KillMode=process (see waydroid-webapp.service) is what normally keeps
+    pid, see _write_status below) is actually still alive.
+    waydroid-webapp.service's KillMode=process is what normally keeps
     that process running across its own self-restart, but it isn't the
     only way a background run can die mid-flight (a host reboot, an OOM
     kill, `kill -9` by hand) - without this liveness check, any of those
