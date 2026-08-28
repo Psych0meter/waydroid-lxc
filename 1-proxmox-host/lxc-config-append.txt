@@ -1,0 +1,30 @@
+# APPEND THESE LINES TO YOUR PROXMOX LXC CONFIG (/etc/pve/lxc/<VMID>.conf)
+# CRITICAL: the container must be PRIVILEGED (unprivileged = 0).
+#
+# SECURITY WARNING: disables AppArmor confinement, allows all cgroup
+# devices, and drops no Linux capabilities - about as permissive as an LXC
+# config gets. This is a known trade-off for binder device access without
+# rebuilding a kernel module. Only use on a trusted host/LAN. See the
+# README's "Security" section for details.
+lxc.apparmor.profile: unconfined
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.mount.auto: proc:rw sys:rw
+lxc.autodev: 1
+
+# No mknod hook for /dev/binder: Waydroid creates it itself via binderfs on
+# every session start, and a statically pre-created device here would
+# conflict with that (see docs/DEBUGGING_AND_TESTS.md, Phase 3).
+
+# Loop devices for mounting Waydroid's images read-only. 'optional' avoids
+# a container start failure if a node is missing on the host
+# (enable-binder.sh creates them); 'create=file' lets LXC create the mount target.
+lxc.mount.entry: /dev/loop-control dev/loop-control none bind,optional,create=file
+lxc.mount.entry: /dev/loop0 dev/loop0 none bind,optional,create=file
+lxc.mount.entry: /dev/loop1 dev/loop1 none bind,optional,create=file
+lxc.mount.entry: /dev/loop2 dev/loop2 none bind,optional,create=file
+lxc.mount.entry: /dev/loop3 dev/loop3 none bind,optional,create=file
+lxc.mount.entry: /dev/loop4 dev/loop4 none bind,optional,create=file
+lxc.mount.entry: /dev/loop5 dev/loop5 none bind,optional,create=file
+lxc.mount.entry: /dev/loop6 dev/loop6 none bind,optional,create=file
+lxc.mount.entry: /dev/loop7 dev/loop7 none bind,optional,create=file

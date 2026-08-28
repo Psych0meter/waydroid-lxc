@@ -1,0 +1,27 @@
+[Unit]
+Description=Waydroid session (Android UI) auto-start
+# waydroid-container.service (from the waydroid package) manages the
+# internal Android container and must be up first.
+After=sway.service waydroid-container.service
+Requires=sway.service waydroid-container.service
+
+[Service]
+Type=simple
+Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
+Environment="WAYLAND_DISPLAY=wayland-1"
+Environment="HOME=/root"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/waydroid-dbus/session"
+ExecStartPre=/usr/local/bin/wait-for-wayland-socket.sh
+# Dummy PulseAudio socket: Waydroid's internal LXC config bind-mounts
+# $XDG_RUNTIME_DIR/pulse/native and fails to start without it (no audio
+# server runs here). Recreated every start since /run is a tmpfs.
+ExecStartPre=/bin/sh -c 'mkdir -p /run/waydroid-wayland/pulse && touch /run/waydroid-wayland/pulse/native'
+ExecStartPre=/usr/local/bin/ensure-waydroid-dbus.sh
+ExecStart=/usr/bin/waydroid session start
+ExecStartPost=/bin/sh -c 'sleep 5 && /usr/bin/waydroid show-full-ui &'
+ExecStartPost=/bin/sh -c '/usr/local/bin/mount-emulated-storage.sh &'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

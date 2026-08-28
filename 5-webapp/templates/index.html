@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waydroid Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Waydroid Control</h1>
+    <div class="row">
+      <button id="update-btn" type="button" title="Check for a webapp update">Update</button>
+      <button id="api-key-btn" type="button" title="Set API key">API key</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="screen-panel">
+      <div id="screen-header">
+        <h2 class="section-heading">Screen</h2>
+        <button id="screen-toggle-btn" type="button">Start screen</button>
+      </div>
+      <p class="hint">
+        Tap to tap, drag to swipe. Click the image once, then type to send
+        keystrokes directly.
+      </p>
+      <div id="screen-refresh-control">
+        <label for="screen-refresh-rate">Idle refresh rate: <span id="screen-refresh-value">1.0s</span></label>
+        <input type="range" id="screen-refresh-rate" min="200" max="3000" step="100" value="1000">
+        <label id="screen-realtime-label"><input type="checkbox" id="screen-realtime-toggle"> Real-time</label>
+        <span id="screen-refresh-indicator"></span>
+      </div>
+      <div id="screen-viewport">
+        <img id="screen-img" alt="Waydroid screen (not started)" draggable="false" tabindex="0">
+      </div>
+      <div id="screen-controls">
+        <div class="row">
+          <button type="button" id="screen-key-back">Back</button>
+          <button type="button" id="screen-key-home">Home</button>
+          <button type="button" id="screen-key-recents">Recents</button>
+        </div>
+        <form id="screen-text-form">
+          <div class="row">
+            <input type="text" id="screen-text-input" placeholder="Type or paste text to send">
+            <button type="submit">Send text</button>
+          </div>
+        </form>
+      </div>
+      <div id="screen-status" class="status-line" role="status"></div>
+    </section>
+
+    <section id="map-panel">
+      <h2 class="section-heading">Location</h2>
+      <div id="map"></div>
+      <p class="hint">Click the map to set a location, or search an address below.</p>
+    </section>
+
+    <section id="form-panel">
+      <form id="address-form">
+        <label for="address">Address</label>
+        <div class="row">
+          <input type="text" id="address" name="address" placeholder="e.g. Eiffel Tower, Paris">
+          <button type="submit">Search</button>
+        </div>
+      </form>
+
+      <form id="coords-form">
+        <label for="latitude">Latitude</label>
+        <input type="text" id="latitude" name="latitude" placeholder="48.8584" required>
+
+        <label for="longitude">Longitude</label>
+        <input type="text" id="longitude" name="longitude" placeholder="2.2945" required>
+
+        <label for="altitude">Altitude (m, optional)</label>
+        <input type="text" id="altitude" name="altitude" placeholder="35.0">
+
+        <div class="row">
+          <button type="submit" id="set-btn">Set location</button>
+          <button type="button" id="stop-btn">Stop</button>
+        </div>
+      </form>
+
+      <div id="status" class="status-line" role="status"></div>
+
+      <section id="favorites-panel">
+        <h2 class="section-heading">Favorites</h2>
+        <input type="text" id="favorite-search" placeholder="Filter favorites...">
+        <ul id="favorites-list"></ul>
+        <form id="save-favorite-form">
+          <div class="row">
+            <input type="text" id="favorite-name" placeholder="Name this location" maxlength="100">
+            <button type="submit">Save favorite</button>
+          </div>
+          <p class="hint">Saves the coordinates currently entered above.</p>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="api-key-dialog">
+    <form method="dialog">
+      <label for="api-key-input">API key</label>
+      <input type="password" id="api-key-input" autocomplete="off">
+      <p id="api-key-dialog-message" class="status-line" role="alert" hidden></p>
+      <p class="hint">
+        Stored only in this browser. Also readable on the container at
+        /etc/waydroid-webapp/api-token.
+      </p>
+      <div class="row">
+        <button type="submit" value="save">Save</button>
+        <button type="button" id="api-key-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="update-dialog">
+    <h2 class="section-heading" id="update-dialog-title">Update</h2>
+    <p id="update-dialog-message" class="status-line" role="status"></p>
+    <div class="row">
+      <button type="button" id="update-confirm-btn">Update</button>
+      <button type="button" id="update-cancel-btn">Not now</button>
+      <button type="button" id="update-close-btn" hidden>Close</button>
+    </div>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+[Unit]
+Description=Waydroid control webapp (GPS mock-location + screen control API)
+After=network.target waydroid-session.service
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-/etc/waydroid-webapp/webapp.env
+# --preload: without it, each of the 2 workers imports app.py (and
+# therefore auth.py's module-level API_TOKEN = load_or_create_token())
+# independently after forking. On a true first boot, before api-token
+# exists, that's a real race - both workers can see the file missing,
+# each generate a *different* random token, and both write it, leaving
+# only one on disk while the other worker keeps serving its own
+# different token in memory. Every request that landed on that worker
+# then 401s even with the correct (displayed/saved) key. --preload
+# imports the app once in the master before forking, so both workers
+# share the same already-resolved token via copy-on-write.
+ExecStart=__VENV_DIR__/bin/gunicorn --preload --chdir __APP_DIR__ -w 2 -b ${WEBAPP_HOST}:${WEBAPP_PORT} app:app
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

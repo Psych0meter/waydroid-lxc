@@ -1,0 +1,11 @@
+# Headless Sway config: a wlroots compositor for Waydroid to render
+# through, with no display ever attached - no terminal, no bar, no
+# default keybindings. Resolution matches the usual Android portrait size.
+output * resolution 720x1280
+
+# Waydroid talks Wayland directly, doesn't need Xwayland.
+xwayland disable
+
+bar {
+    mode invisible
+}

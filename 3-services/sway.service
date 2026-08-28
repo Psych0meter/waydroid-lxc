@@ -1,0 +1,21 @@
+[Unit]
+Description=Sway (headless, wlroots) Compositor
+After=network.target
+
+[Service]
+# Dedicated runtime dir, not /run/user/0: logind remounts that as a fresh
+# tmpfs on every root SSH session, wiping Sway's Wayland socket (see
+# docs/DEBUGGING_AND_TESTS.md, Phase 3).
+Environment="XDG_RUNTIME_DIR=/run/waydroid-wayland"
+Environment="WAYLAND_DISPLAY=wayland-1"
+Environment="HOME=/root"
+Environment="WLR_BACKENDS=headless"
+Environment="WLR_LIBINPUT_NO_DEVICES=1"
+ExecStartPre=/bin/mkdir -p /run/waydroid-wayland
+ExecStartPre=/bin/chmod 0700 /run/waydroid-wayland
+ExecStart=/usr/bin/sway --config /etc/sway/config-headless
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
