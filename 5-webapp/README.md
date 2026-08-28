@@ -46,11 +46,16 @@ name of your choice; the favorites list below it filters as you type and
 each entry re-applies its saved location with one click.
 
 The "Screen" panel below the map gives you a live view of the device:
-click "Start screen" to begin polling screenshots (about once a second)
-over adb, click/drag on the image to tap or swipe (drag distance under
-15px counts as a tap), and use the text field or the Back/Home/Recents
-buttons to send input - see "Screen: remote control" below for how this
-works.
+click "Start screen" to begin polling screenshots over adb, click/drag on
+the image to tap or swipe (drag distance under 15px counts as a tap), and
+use the text field or the Back/Home/Recents buttons to send input - see
+"Screen: remote control" below for how this works. The refresh rate is
+adaptive: it automatically speeds up to 4 polls/second for a few seconds
+after each tap/swipe/key/text, then settles back down to an "idle" rate
+you control with the drag bar above the image (0.2s-3s, default 1s) - so
+it feels closer to a live feed while you're actually interacting, without
+polling that fast (and taxing adb/the container) while you're just
+watching.
 
 Or drive the API directly:
 
@@ -178,9 +183,12 @@ VNC view to worry about (every screen action goes through the same
 API-key-gated routes as everything else).
 
 * `GET /api/screen/screenshot` calls `AdbDevice.screenshot()` (adbutils
-  wraps `adb exec-out screencap`) and returns the PNG bytes directly.
-  The frontend polls this roughly once a second while the Screen panel
-  is open, converting each response to a `Blob` URL and revoking the
+  wraps `adb exec-out screencap`) and returns the PNG bytes directly. The
+  frontend polls this at an adaptive rate while the Screen panel is open
+  - a fast 250ms while you're actively tapping/swiping/typing (recent
+  activity, tracked client-side), decaying after about 4 seconds of no
+  input to an "idle" rate set by the drag bar (200ms-3000ms, default
+  1000ms) - converting each response to a `Blob` URL and revoking the
   previous one so repeated polling doesn't leak memory.
 * `POST /api/screen/tap` / `/swipe` call `AdbDevice.click()` /
   `AdbDevice.swipe()`. The frontend disambiguates a single

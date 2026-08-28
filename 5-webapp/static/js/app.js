@@ -271,11 +271,74 @@
   const screenStatusEl = document.getElementById("screen-status");
   const screenTextForm = document.getElementById("screen-text-form");
   const screenTextInput = document.getElementById("screen-text-input");
+  const screenRefreshRange = document.getElementById("screen-refresh-rate");
+  const screenRefreshValueEl = document.getElementById("screen-refresh-value");
+  const screenRefreshIndicatorEl = document.getElementById("screen-refresh-indicator");
 
   let screenPolling = false;
   let screenTimer = null;
   let screenObjectUrl = null;
   let dragStart = null;
+
+  // Two speeds: a fast, near-video-feed rate used for a few seconds right
+  // after you actually do something (tap/swipe/key/text), and a slower
+  // "just watching" rate the rest of the time - set by the drag bar. This
+  // avoids hammering adb (and the CPU-constrained container) with fast
+  // screencaps continuously, while still feeling responsive while in use.
+  const ACTIVE_POLL_INTERVAL_MS = 250;
+  const ACTIVE_WINDOW_MS = 4000;
+  let idlePollIntervalMs = parseInt(screenRefreshRange.value, 10) || 1000;
+  let lastActivityAt = 0;
+
+  function isBoosted() {
+    return Date.now() - lastActivityAt < ACTIVE_WINDOW_MS;
+  }
+
+  function currentPollInterval() {
+    return isBoosted() ? ACTIVE_POLL_INTERVAL_MS : idlePollIntervalMs;
+  }
+
+  function formatSeconds(ms) {
+    return (ms / 1000).toFixed(1) + "s";
+  }
+
+  function updateRefreshIndicator() {
+    if (!screenPolling) {
+      screenRefreshIndicatorEl.textContent = "";
+      screenRefreshIndicatorEl.className = "";
+      return;
+    }
+    const boosted = isBoosted();
+    screenRefreshIndicatorEl.textContent = boosted
+      ? `live (${formatSeconds(ACTIVE_POLL_INTERVAL_MS)})`
+      : `idle (${formatSeconds(idlePollIntervalMs)})`;
+    screenRefreshIndicatorEl.className = boosted ? "active" : "";
+  }
+
+  // Called on every tap/swipe/key/text: switches to the fast rate right
+  // away (rather than waiting for the next already-scheduled idle-rate
+  // poll to fire) by cancelling and immediately re-arming the timer.
+  function markActivity() {
+    lastActivityAt = Date.now();
+    updateRefreshIndicator();
+    if (screenPolling && screenTimer) {
+      window.clearTimeout(screenTimer);
+      screenTimer = window.setTimeout(pollScreen, ACTIVE_POLL_INTERVAL_MS);
+    }
+  }
+
+  screenRefreshRange.addEventListener("input", () => {
+    idlePollIntervalMs = parseInt(screenRefreshRange.value, 10);
+    screenRefreshValueEl.textContent = formatSeconds(idlePollIntervalMs);
+    // If we're not mid-boost, apply the new idle rate immediately instead
+    // of waiting out whatever interval was previously scheduled.
+    if (screenPolling && screenTimer && !isBoosted()) {
+      window.clearTimeout(screenTimer);
+      screenTimer = window.setTimeout(pollScreen, idlePollIntervalMs);
+    }
+    updateRefreshIndicator();
+  });
+  screenRefreshValueEl.textContent = formatSeconds(idlePollIntervalMs);
 
   function setScreenStatus(message, kind) {
     screenStatusEl.textContent = message;
@@ -308,8 +371,9 @@
     } catch (err) {
       setScreenStatus(err.message, "error");
     }
+    updateRefreshIndicator();
     if (screenPolling) {
-      screenTimer = window.setTimeout(pollScreen, 1000);
+      screenTimer = window.setTimeout(pollScreen, currentPollInterval());
     }
   }
 
@@ -321,6 +385,7 @@
     }
     screenPolling = true;
     screenToggleBtn.textContent = "Stop screen";
+    lastActivityAt = Date.now(); // start at the fast rate, settle down after ACTIVE_WINDOW_MS
     pollScreen();
   }
 
@@ -328,6 +393,7 @@
     screenPolling = false;
     if (screenTimer) window.clearTimeout(screenTimer);
     screenToggleBtn.textContent = "Start screen";
+    updateRefreshIndicator();
   }
 
   screenToggleBtn.addEventListener("click", () => {
@@ -363,6 +429,7 @@
 
   screenImg.addEventListener("pointerdown", (event) => {
     if (!screenPolling) return;
+    markActivity();
     dragStart = toDeviceCoords(event);
     // Pointer capture keeps pointermove/pointerup targeting this element
     // even if the drag ends up outside its bounds (e.g. a fast swipe that
@@ -401,6 +468,7 @@
   });
 
   async function sendScreenKey(key) {
+    markActivity();
     try {
       await apiPost("/api/screen/key", { key });
       setScreenStatus("", "");
@@ -418,6 +486,7 @@
     event.preventDefault();
     const text = screenTextInput.value;
     if (!text) return;
+    markActivity();
     try {
       await apiPost("/api/screen/text", { text });
       screenTextInput.value = "";

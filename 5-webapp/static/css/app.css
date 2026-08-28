@@ -207,6 +207,25 @@ dialog form { gap: 0.6rem; }
   font-weight: 600;
 }
 
+#screen-refresh-control {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+#screen-refresh-control label { flex-shrink: 0; }
+#screen-refresh-control input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+#screen-refresh-indicator {
+  flex-shrink: 0;
+  min-width: 5.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+#screen-refresh-indicator.active { color: var(--accent); }
+
 #screen-viewport {
   display: flex;
   justify-content: center;
