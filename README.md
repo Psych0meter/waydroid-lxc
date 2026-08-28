@@ -128,7 +128,8 @@ a re-run against an existing deployment - it does not preserve a prior
   Store emulated-storage workaround.
 * `5-webapp/` - Flask webapp/API for GPS control (map UI, favorites) and
   adb-based screen control (view + tap/swipe/text) - see
-  `5-webapp/README.md`.
+  `5-webapp/README.md`. `5-webapp/update-webapp.sh` updates it in place
+  from GitHub without redeploying the container.
 * `tests/` - `lint.sh` (static, no Proxmox needed) and `smoke-test.sh` (run
   inside the container after deployment).
 * `docs/` - Detailed debugging methodology.

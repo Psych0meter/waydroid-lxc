@@ -34,6 +34,30 @@ Environment variables (all optional, all re-runnable):
 | `WEBAPP_DATA_DIR`        | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
 | `LEAFLET_VERSION`        | `1.9.4`                                      | pinned Leaflet release to vendor |
 
+## Updating
+
+Once installed, check for and apply a newer version of the webapp
+straight from GitHub, without redeploying the whole container:
+
+```bash
+./update-webapp.sh          # update if a newer commit is available
+./update-webapp.sh --check  # just report whether one is, without applying it
+```
+
+It clones the target ref (`main` by default), backs up the current
+install, syncs in the new `5-webapp/` files, reinstalls Python
+dependencies, regenerates the systemd unit, restarts the service, and
+verifies `/api/health` responds - rolling back to the previous version
+automatically if any step fails. Everything outside `5-webapp/` (the API
+key, `favorites.json`, the vendored Leaflet, device spoofing, GPS setup)
+is untouched. Track a fork or another branch with `--ref <branch>` or
+the `WEBAPP_REPO_URL`/`WEBAPP_UPDATE_REF` environment variables. The
+installed version is recorded at
+`/etc/waydroid-webapp/installed-version`; a deployment installed via
+`0-deploy-all.sh` starts with no version tracked, so its first
+`update-webapp.sh` run always applies (installing whatever's currently
+at the tracked ref) and records a real version from then on.
+
 ## Using it
 
 Open the UI (see the URL `install-webapp.sh` prints) and click "API key"
@@ -291,3 +315,9 @@ of this repo (see the top-level README's "Security" section):
   syntax no matter what characters they contain; input is additionally
   validated (numeric range checks, length limits) before it ever reaches
   a subprocess call.
+* **`update-webapp.sh` clones the repo over HTTPS from GitHub** (or
+  `WEBAPP_REPO_URL`, if pointed at a fork) on every run, then reinstalls
+  Python dependencies from the fetched `requirements.txt` via `pip` -
+  same supply-chain trust model as the `curl | bash` Waydroid installer
+  (see the top-level README's Security section): only point it at a
+  ref/fork you trust.

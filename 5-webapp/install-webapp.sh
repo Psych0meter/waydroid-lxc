@@ -90,6 +90,17 @@ WAYDROID_TOOLS_DIR=${WAYDROID_TOOLS_DIR}
 WEBAPP_DATA_DIR=${WEBAPP_DATA_DIR}
 EOF
 
+# Only set when SCRIPT_DIR is itself a git checkout (e.g. update-webapp.sh's
+# clone, or install-webapp.sh run directly from a git clone rather than a
+# 0-deploy-all.sh tar-push) - otherwise left as "unknown" so
+# update-webapp.sh knows to treat the next check as an update regardless of
+# what's actually running.
+INSTALLED_VERSION="unknown"
+if git -C "${SCRIPT_DIR}" rev-parse HEAD >/dev/null 2>&1; then
+  INSTALLED_VERSION="$(git -C "${SCRIPT_DIR}" rev-parse HEAD)"
+fi
+echo "${INSTALLED_VERSION}" > "${CONF_DIR}/installed-version"
+
 echo "Installing systemd service..."
 sed \
   -e "s|__APP_DIR__|${SCRIPT_DIR}|g" \
@@ -129,4 +140,5 @@ else
 fi
 echo " Screen: click \"Start screen\" in the UI - live device control over"
 echo " adb (screenshots + tap/swipe/text), no separate VNC session needed."
+echo " Update later with: ${SCRIPT_DIR}/update-webapp.sh"
 echo "============================================================"

@@ -436,3 +436,27 @@ pct exec <CTID> -- systemctl start waydroid-session
 Then re-run `setup-gps.sh` (it will install `adb` if needed and connect
 cleanly this time) and confirm with `pct exec <CTID> -- adb devices` -
 it should show `device`, not `unauthorized`.
+
+**Updating just the webapp from GitHub**, without touching anything
+else in the deployment - run `update-webapp.sh` inside the container
+(it needs outbound HTTPS to github.com):
+```bash
+pct exec <CTID> -- bash -c "cd /opt/waydroid-lxc-deploy/5-webapp && ./update-webapp.sh --check"
+pct exec <CTID> -- bash -c "cd /opt/waydroid-lxc-deploy/5-webapp && ./update-webapp.sh"
+```
+It figures out the current install directory from the deployed
+`waydroid-webapp.service` unit (so it still works if that ever differs
+from the `/opt/waydroid-lxc-deploy/5-webapp` default), compares the
+locally recorded version (`/etc/waydroid-webapp/installed-version`)
+against the tracked ref's latest commit, and no-ops if they already
+match - safe to run on a schedule (e.g. a cron job on the Proxmox host
+wrapping the `pct exec` above) as well as by hand. A failed clone
+usually means the container can't reach github.com (check
+`pct exec <CTID> -- curl -fsSI https://github.com`); a failed update
+after the clone succeeds (pip install, the post-restart health check)
+rolls back automatically and leaves the previous install running - the
+"Update failed during: ..." line names the step that failed, and
+`journalctl -u waydroid-webapp` has the service's own logs. A
+deployment installed via `0-deploy-all.sh` has no version tracked
+initially, so its first `update-webapp.sh` run always applies (that's
+expected, not a bug) and records a real version from then on.
