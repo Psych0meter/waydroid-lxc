@@ -579,11 +579,17 @@ recovery:
   restrictive surface - Back and Home are consumed by the keyguard
   itself and won't get you off it. This is the one that can leave you
   unable to see *or* dismiss anything. Since v1.0, the Screen panel has
-  a dedicated "Unlock" field for this: it enters a PIN via digit
-  KeyEvents (`AdbDevice.keyevent()`, not text injection) and `enter`, so
-  it still reaches the keyguard's PIN pad with a completely broken
-  screenshot - same as `POST /api/screen/unlock {"pin": "..."}` directly,
-  or typing on the keyboard with the (blank) screen image focused. The
+  a dedicated "Unlock" field for this: it wakes the device if asleep,
+  swipes up (aimed via `window_size()`/`wm size`, unaffected by
+  `FLAG_SECURE`, so no screenshot is needed) to dismiss the lock
+  screen's clock/notification curtain and reach the actual PIN pad,
+  then enters the PIN via digit KeyEvents (`AdbDevice.keyevent()`, not
+  text injection) and `enter` - reaching the keyguard's PIN pad with a
+  completely broken screenshot and no need to get there yourself first,
+  the same as `POST /api/screen/unlock {"pin": "..."}` directly. (Typing
+  on the keyboard with the screen image focused still works too, but
+  skips the wake/swipe steps - it's meant for a PIN pad already on
+  screen, e.g. right after "Set PIN".) The
   "Lock: locked/unlocked" indicator next to it (`GET
   /api/screen/lock-status`) is a best-effort read of `dumpsys window`,
   not authoritative across every Android/Waydroid build - if it's ever

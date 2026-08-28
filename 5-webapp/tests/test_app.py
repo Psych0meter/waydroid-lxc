@@ -585,9 +585,10 @@ class ScreenTest(WebappTestCase):
         device.shell.side_effect = fake_shell
 
     def test_unlock_enters_pin_via_keyevents_when_locked(self):
-        device = self._mock_device()
+        device = self._mock_device(width=1080, height=1920)
         self._mock_lock_and_power(device, locked=True, awake=True)
-        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]), \
+             mock.patch.object(screen_module.time, "sleep"):
             resp = self.post("/api/screen/unlock", {"pin": "1234"})
         self.assertEqual(resp.status_code, 200)
         # 1 2 3 4 -> KEYCODE_1..4 (8, 9, 10, 11), then KEYCODE_ENTER (66) -
@@ -595,16 +596,22 @@ class ScreenTest(WebappTestCase):
         device.keyevent.assert_has_calls(
             [mock.call(8), mock.call(9), mock.call(10), mock.call(11), mock.call(66)]
         )
+        # Regression test: swipes up to dismiss the lock screen's curtain
+        # (clock/notification view) before typing, using window_size()
+        # (unaffected by FLAG_SECURE) rather than a screenshot to aim it.
+        device.swipe.assert_called_once_with(540, 1536, 540, 384, duration=0.3)
 
     def test_unlock_wakes_the_device_first_if_asleep(self):
         device = self._mock_device()
         self._mock_lock_and_power(device, locked=True, awake=False)
-        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]), \
+             mock.patch.object(screen_module.time, "sleep"):
             resp = self.post("/api/screen/unlock", {"pin": "12"})
         self.assertEqual(resp.status_code, 200)
         device.keyevent.assert_has_calls(
             [mock.call(26), mock.call(8), mock.call(9), mock.call(66)]
         )
+        device.swipe.assert_called_once()
 
     def test_unlock_does_nothing_when_already_unlocked(self):
         # Sending digit keyevents blind when nothing needs them would just

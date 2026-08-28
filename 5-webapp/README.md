@@ -121,8 +121,10 @@ system screen.
 Below the text field, the "Lock: locked/unlocked" indicator shows the
 device's keyguard state (best-effort - see `GET /api/screen/lock-status`
 below). "Unlock" enters a PIN typed into the field next to it and works
-even with a completely broken screenshot, since it's the same
-digit-KeyEvent mechanism as typing a PIN directly into the Screen panel
+even with a completely broken screenshot and no need to navigate to the
+PIN pad yourself first - it wakes the device if needed, swipes past the
+lock screen's clock/notification curtain, then types the PIN via the
+same digit-KeyEvent mechanism as typing directly into the Screen panel
 (see "Screen: remote control", below). "Set PIN" runs `locksettings
 set-pin` for you - the same thing as running it by hand over adb - to
 set a PIN for the first time or change an existing one (enter the
@@ -339,9 +341,14 @@ goes through the same API-key-gated routes as everything else.
 * `POST /api/screen/unlock` takes `{"pin": "..."}`, checks
   `lock-status` first (does nothing but report if already unlocked, so
   it can't type stray digits into whatever's actually focused), wakes
-  the device if `dumpsys power` says it's asleep, then enters the PIN
-  as digit KeyEvents + `enter` - the same blind-entry mechanism as
-  typing into the Screen panel, wrapped into one call.
+  the device if `dumpsys power` says it's asleep, swipes up
+  (`window_size()`, i.e. `wm size` - unaffected by `FLAG_SECURE`, aims
+  it correctly with no screenshot needed) to dismiss the lock screen's
+  clock/notification curtain and reach the actual PIN pad, then enters
+  the PIN as digit KeyEvents + `enter` - the same blind-entry mechanism
+  as typing into the Screen panel, wrapped into one call that gets you
+  from locked (in whatever state that looks like) to unlocked without
+  ever needing to see the screen yourself first.
 * `POST /api/screen/set-pin` takes `{"pin": "...", "old_pin": "..."}`
   (`old_pin` optional) and runs `adb shell locksettings set-pin [--old
   <old_pin>] <pin>` - the same command that works by hand. `locksettings`

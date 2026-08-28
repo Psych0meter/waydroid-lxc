@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import re
 import subprocess
+import time
 from contextlib import suppress
 
 import adbutils
@@ -257,15 +258,19 @@ def set_pin(pin: object, old_pin: object = None) -> ActionResult:
 
 def unlock_with_pin(pin: object) -> ActionResult:
     """
-    Enters `pin` via digit KeyEvents and Enter - the same blind-entry
-    mechanism as typing a PIN into the Screen panel (see send_text's
-    docstring for why KeyEvents, not text injection, are what actually
-    reaches a keyguard), wrapped into one call. Wakes the device first if
-    it's asleep, since a locked-and-asleep device won't have the PIN pad
-    on screen to receive them. Does nothing but report if lock_status()
-    already says unlocked - sending digit keyevents blind when something
-    else has focus (a text field, a game...) would just type stray
-    digits into it.
+    Wakes the device if asleep, swipes up to dismiss the lock screen's
+    curtain (the clock/notification view most stock Android keyguards
+    show before the PIN pad itself - without this, a locked-but-awake
+    or just-woken device may not have the PIN pad on screen at all yet
+    to receive digit keyevents), then enters `pin` via digit KeyEvents
+    and Enter - the same blind-entry mechanism as typing a PIN into the
+    Screen panel (see send_text's docstring for why KeyEvents, not text
+    injection, are what actually reaches a keyguard) - wrapped into one
+    call that gets you from "locked, however that looks" to unlocked
+    without ever needing to see the screen. Does nothing but report if
+    lock_status() already says unlocked - sending digit keyevents (and
+    swiping) blind when something else has focus (a text field, a
+    game...) would just disrupt it.
     """
     if not isinstance(pin, str) or not pin.isdigit():
         raise ActionError("pin must be numeric digits.")
@@ -281,6 +286,20 @@ def unlock_with_pin(pin: object) -> ActionResult:
     if re.search(r"mWakefulness=Asleep", power_output):
         with suppress(adbutils.AdbError):
             device.keyevent(_KEY_CODES["power"])
+        time.sleep(0.3)  # give the wake/screen-on animation a moment
+
+    # window_size() shells out to 'wm size', not screencap - it works
+    # even on a FLAG_SECURE surface, so the swipe below can be aimed
+    # correctly without ever needing a screenshot. Swiping up when the
+    # PIN pad is already showing (no curtain to dismiss) is harmless on
+    # a stock AOSP keyguard - so this always runs rather than trying to
+    # detect which case we're in blind.
+    width, height = _screen_size(device)
+    try:
+        device.swipe(width // 2, int(height * 0.8), width // 2, int(height * 0.2), duration=0.3)
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Unlock failed: {exc}") from exc
+    time.sleep(0.4)  # let the keyguard's own transition animation settle
 
     try:
         for digit in pin:
