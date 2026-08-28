@@ -91,9 +91,11 @@ The "Screen" panel at the top gives you a live view of the device: click
 image to tap or swipe (drag distance under 15px counts as a tap), use the
 text field or the Back/Home/Recents buttons to send input, or click the
 image once and just type on your own keyboard - it forwards keystrokes
-directly (letters/digits/punctuation as typed text, plus
-Backspace/Enter/Tab/Escape/Delete/arrows/Space as proper key events) to
-whatever's focused on the device, the same as a keyboard plugged into it.
+directly (letters/punctuation as typed text, plus
+Backspace/Enter/Tab/Escape/Delete/arrows/Space/digits as proper key
+events - see "Screen: remote control" below for why digits specifically
+are key events, not typed text) to whatever's focused on the device, the
+same as a keyboard plugged into it.
 The image shows a highlighted border while it has this keyboard focus;
 click anywhere else to release it back to normal page navigation.
 "Stop screen" stops polling and clears the view, rather than leaving the
@@ -101,16 +103,20 @@ last frame frozen on screen. See "Screen: remote control" below for how
 both of these work.
 
 "Kill all apps" force-stops every third-party app on the device
-(`pm list packages -3` + `am force-stop` on each) - a recovery button for
-a frozen or stuck foreground app. Unlike using Recents to close apps by
-hand, it doesn't depend on the screen actually working, which is exactly
-the situation it's usually reached for: some system UI (a `FLAG_SECURE`
-screen especially - see the note about setting a screen lock, below) can
-leave `screenshot`/adb screencap unable to capture anything until you
-navigate away, and Back/Home (also adb-based, not screen-dependent)
-don't always get you out. It only touches third-party packages, not
-system ones like Settings/SystemUI, so it can't itself force-stop the
-thing that's stuck if that thing is a system screen.
+(`pm list packages -3` + `am force-stop` on each), then sends Home so
+the now-dead app's window actually clears rather than sitting there
+"killed but still open" (force-stop alone kills the process, but
+doesn't by itself dismiss whatever the window manager was still showing
+for it). A recovery button for a frozen or stuck foreground app - unlike
+using Recents to close apps by hand, it doesn't depend on the screen
+actually working, which is exactly the situation it's usually reached
+for: some system UI (a `FLAG_SECURE` screen especially - see the note
+about setting a screen lock, below) can leave `screenshot`/adb screencap
+unable to capture anything until you navigate away, and Back/Home (also
+adb-based, not screen-dependent) don't always get you out. It only
+touches third-party packages, not system ones like Settings/SystemUI,
+so it can't itself force-stop the thing that's stuck if that thing is a
+system screen.
 
 Below it, the "Location" panel controls GPS mock-location: click a point
 on the map, drag the marker, or search an address - "Set location" calls
@@ -277,26 +283,36 @@ goes through the same API-key-gated routes as everything else.
   pointerdown/pointerup pair by drag distance (in device-pixel space,
   scaled from the displayed image's `naturalWidth`/`naturalHeight` vs.
   its on-screen size): under 15px is a tap, otherwise a swipe.
-* `POST /api/screen/text` calls `AdbDevice.send_keys()`; `POST
-  /api/screen/key` calls `AdbDevice.keyevent()` for a fixed set of named
-  keys (`back`, `home`, `recents`, `enter`, `backspace`, `power`,
-  `volume_up`, `volume_down`, `tab`, `space`, `escape`, `delete`, `up`,
-  `down`, `left`, `right`) rather than accepting arbitrary keycodes.
+* `POST /api/screen/text` calls `AdbDevice.send_keys()` ('input text' -
+  synthetic text injection into whatever field is focused); `POST
+  /api/screen/key` calls `AdbDevice.keyevent()` (real KeyEvents) for a
+  fixed set of named keys (`back`, `home`, `recents`, `enter`,
+  `backspace`, `power`, `volume_up`, `volume_down`, `tab`, `space`,
+  `escape`, `delete`, `up`, `down`, `left`, `right`, `0`-`9`) rather than
+  accepting arbitrary keycodes. The digits are deliberately real
+  KeyEvents rather than going through `/text` like other printable
+  characters: a lock-screen PIN pad often only responds to actual key
+  presses, not text injection, so a PIN can be entered - digit by digit,
+  then `enter` - entirely blind, with no working screenshot at all. See
+  the `FLAG_SECURE` note in `docs/DEBUGGING_AND_TESTS.md`, Phase 6.
 * `POST /api/screen/kill-all` lists installed third-party packages
-  (`pm list packages -3`) and `am force-stop`s each one, best-effort - a
-  package that fails to stop doesn't block the rest, and the response
-  reports whichever ones actually did. Recovery tool for a frozen or
-  stuck foreground app; unlike clearing Recents by hand, it works even
-  when `screenshot`/tap are themselves failing, since it never needs to
-  see or touch the screen.
+  (`pm list packages -3`), `am force-stop`s each one best-effort (one
+  stubborn package doesn't block the rest - the response reports
+  whichever ones actually stopped), then sends `home` so the now-dead
+  app's window actually clears instead of sitting there "killed but
+  still open." Recovery tool for a frozen or stuck foreground app;
+  unlike clearing Recents by hand, it works even when `screenshot`/tap
+  are themselves failing, since it never needs to see or touch the
+  screen.
 * **Host-keyboard passthrough**: clicking the screen image gives it
   `tabindex="0"` focus (shown by a highlighted border), which arms a
   `keydown` listener scoped to that element - so it only fires while the
   image itself is focused, never stealing keystrokes meant for the
   GPS/favorites fields or the API key dialog. Control keys (Backspace,
-  Enter, Tab, Escape, Delete, arrows, Space) map to `/api/screen/key` by
-  `event.code` (physical/layout-independent); anything else that
-  produces a single printable character goes to `/api/screen/text` via
+  Enter, Tab, Escape, Delete, arrows, Space) and digits (`0`-`9`, both
+  the top row and numpad) map to `/api/screen/key` by `event.code`
+  (physical/layout-independent); anything else that produces a single
+  printable character goes to `/api/screen/text` via
   `event.key`, which already reflects Shift/layout (e.g. Shift+1 -> `!`
   on a US layout) with no separate Shift-tracking needed. A single space
   goes through `/api/screen/key {"key": "space"}` rather than

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import subprocess
+from contextlib import suppress
 
 import adbutils
 
@@ -35,6 +36,20 @@ _KEY_CODES = {
     "down": 20,
     "left": 21,
     "right": 22,
+    # Real KeyEvents, not text injection - unlike send_text()'s 'input
+    # text', these still reach a lock-screen PIN pad (see the docstring
+    # on send_text for why that distinction matters), so a PIN can be
+    # entered entirely through named keys: "0".."9" then "enter".
+    "0": 7,
+    "1": 8,
+    "2": 9,
+    "3": 10,
+    "4": 11,
+    "5": 12,
+    "6": 13,
+    "7": 14,
+    "8": 15,
+    "9": 16,
 }
 
 
@@ -141,7 +156,13 @@ def send_text(text: object) -> ActionResult:
     """
     Types `text` into whatever currently has focus (an Android EditText,
     a search box, ...) via 'input text' under the hood - there has to be
-    a focused, editable field on screen already (tap one first).
+    a focused, editable field on screen already (tap one first). This is
+    text *injection*, delivered straight to the focused view rather than
+    as real hardware-style key presses - fine for a normal text field,
+    but not reliable against a lock-screen PIN/pattern/password pad,
+    which (unlike a plain EditText) often only responds to actual
+    KeyEvents. send_key() with a digit ("0".."9") + "enter" is the one
+    that reaches those.
     """
     if not isinstance(text, str) or not text.strip():
         raise ActionError("text is required.")
@@ -169,13 +190,21 @@ def kill_all_apps() -> ActionResult:
     """
     Force-stops every third-party app ('pm list packages -3' - not
     system packages like Settings/SystemUI, which force-stopping is far
-    riskier than helpful for). A recovery tool for a frozen or stuck
-    foreground app: the adb equivalent of swiping every card away in
-    Recents, but it doesn't depend on the screen actually working -
-    unlike Recents itself, which needs a working screenshot/tap to use,
-    the one thing this is often reached for. One stubborn package
-    failing to stop doesn't block the rest; the final tally is whatever
-    actually succeeded.
+    riskier than helpful for), then sends Home. A recovery tool for a
+    frozen or stuck foreground app: the adb equivalent of swiping every
+    card away in Recents, but it doesn't depend on the screen actually
+    working - unlike Recents itself, which needs a working
+    screenshot/tap to use, the one thing this is often reached for. One
+    stubborn package failing to stop doesn't block the rest; the final
+    tally is whatever actually succeeded.
+
+    The Home keyevent at the end matters: force-stop only kills the
+    process, it doesn't dismiss whatever the window manager is still
+    showing for it - without this, the now-dead app's last frame (or a
+    blank/frozen surface) stays on screen, which reads as "killed but
+    still open." Sent even when nothing was actually running, since a
+    frozen screen with 0 killable apps is exactly when landing back on
+    the launcher is most useful.
     """
     device = _device()
     try:
@@ -195,6 +224,9 @@ def kill_all_apps() -> ActionResult:
             stopped.append(package)
         except adbutils.AdbError:
             continue  # best-effort - move on and report what did stop
+
+    with suppress(adbutils.AdbError):
+        device.keyevent(_KEY_CODES["home"])
 
     return ActionResult(
         ok=True,

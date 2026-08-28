@@ -433,6 +433,22 @@ class ScreenTest(WebappTestCase):
                 self.assertEqual(resp.status_code, 200, key)
                 device.keyevent.assert_called_once_with(code)
 
+    def test_send_key_digits(self):
+        # Regression test: digits have to go through real KeyEvents
+        # (send_key/keyevent), not send_text()'s 'input text' injection -
+        # a lock-screen PIN pad often only responds to the former, which
+        # is the whole point of exposing them here (see
+        # static/js/app.js's SCREEN_KEYDOWN_KEY_MAP and the docstring on
+        # send_text()).
+        device = self._mock_device()
+        expected = {str(d): code for d, code in enumerate(range(7, 17))}
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            for key, code in expected.items():
+                device.keyevent.reset_mock()
+                resp = self.post("/api/screen/key", {"key": key})
+                self.assertEqual(resp.status_code, 200, key)
+                device.keyevent.assert_called_once_with(code)
+
     def test_send_text_single_space_is_rejected(self):
         # A literal space typed via the live keyboard has to go through
         # /api/screen/key {"key": "space"} instead (see actions/screen.py)
@@ -457,14 +473,22 @@ class ScreenTest(WebappTestCase):
         device.shell.assert_any_call("pm list packages -3")
         device.shell.assert_any_call(["am", "force-stop", "com.example.one"])
         device.shell.assert_any_call(["am", "force-stop", "com.example.two"])
+        # Regression test: force-stop alone leaves the (now-dead) app's
+        # last frame on screen - "killed but still open" - without also
+        # going Home.
+        device.keyevent.assert_called_once_with(3)
 
     def test_kill_all_with_no_third_party_packages(self):
+        # Still goes Home even with nothing to stop - a frozen screen
+        # with 0 killable apps is exactly when landing on the launcher
+        # is most useful.
         device = self._mock_device()
         device.shell.return_value = ""
         with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
             resp = self.post("/api/screen/kill-all")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["data"]["stopped"], [])
+        device.keyevent.assert_called_once_with(3)
 
     def test_kill_all_skips_a_package_that_fails_to_stop(self):
         # One stubborn package failing to force-stop shouldn't block the

@@ -735,9 +735,10 @@
   // --- Host-keyboard passthrough -----------------------------------------
   // Scoped to keydown on the image itself (focused via pointerdown above),
   // so it never intercepts keystrokes meant for other fields. Control
-  // keys map to /api/screen/key by event.code (layout-independent);
-  // printable characters go to /api/screen/text via event.key, which
-  // already accounts for Shift/layout.
+  // keys (and digits - see below) map to /api/screen/key by event.code
+  // (layout-independent); other printable characters go to
+  // /api/screen/text via event.key, which already accounts for
+  // Shift/layout.
   const SCREEN_KEYDOWN_KEY_MAP = {
     Backspace: "backspace",
     Enter: "enter",
@@ -750,6 +751,14 @@
     ArrowLeft: "left",
     ArrowRight: "right",
     Space: "space",
+    // Real KeyEvents, not /api/screen/text's synthetic text injection -
+    // the one thing that reliably reaches a lock-screen PIN pad (see
+    // actions/screen.py's send_text() docstring), so typing a PIN here
+    // works even completely blind, with no working screenshot at all.
+    Digit0: "0", Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4",
+    Digit5: "5", Digit6: "6", Digit7: "7", Digit8: "8", Digit9: "9",
+    Numpad0: "0", Numpad1: "1", Numpad2: "2", Numpad3: "3", Numpad4: "4",
+    Numpad5: "5", Numpad6: "6", Numpad7: "7", Numpad8: "8", Numpad9: "9",
   };
 
   // Sent one at a time, in order, so fast typing can't reach the device
