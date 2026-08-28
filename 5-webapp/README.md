@@ -49,8 +49,10 @@ directly (letters/digits/punctuation as typed text, plus
 Backspace/Enter/Tab/Escape/Delete/arrows/Space as proper key events) to
 whatever's focused on the device, the same as a keyboard plugged into it.
 The image shows a highlighted border while it has this keyboard focus;
-click anywhere else to release it back to normal page navigation. See
-"Screen: remote control" below for how both of these work.
+click anywhere else to release it back to normal page navigation.
+"Stop screen" stops polling and clears the view, rather than leaving the
+last frame frozen on screen. See "Screen: remote control" below for how
+both of these work.
 
 Below it, the "Location" panel controls GPS mock-location: click a point
 on the map, drag the marker, or search an address - "Set location" calls

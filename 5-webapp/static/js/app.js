@@ -438,6 +438,17 @@
     screenPolling = false;
     if (screenTimer) window.clearTimeout(screenTimer);
     screenToggleBtn.textContent = "Start screen";
+    // Hides the last frame rather than leaving it frozen on screen -
+    // removing the attribute (not just clearing it) is what the
+    // #screen-img[src] CSS rule keys off of to hide the element.
+    if (screenObjectUrl) {
+      URL.revokeObjectURL(screenObjectUrl);
+      screenObjectUrl = null;
+    }
+    screenImg.removeAttribute("src");
+    screenImg.alt = "Waydroid screen (not started)";
+    screenImg.blur();
+    dragStart = null;
     updateRefreshIndicator();
   }
 
