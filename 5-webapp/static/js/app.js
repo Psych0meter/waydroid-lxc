@@ -39,6 +39,13 @@
       apiKeyDialogMessage.hidden = true;
     }
     apiKeyInput.value = getApiKey();
+    // Reset returnValue before showing: a <form method="dialog"> submit
+    // only overwrites returnValue when its submitter has an explicit
+    // value attribute, so without this a dialog previously closed via
+    // Cancel (returnValue "cancel") would otherwise still read as
+    // cancelled the next time it's saved, and the key would silently
+    // never be stored.
+    apiKeyDialog.returnValue = "";
     if (!apiKeyDialog.open) apiKeyDialog.showModal();
   }
 
