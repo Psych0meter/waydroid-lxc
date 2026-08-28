@@ -486,3 +486,45 @@ To pick up `--preload` itself (belt-and-suspenders against the same
 class of race in general, not required for this specific symptom to go
 away), re-run `install-webapp.sh` or `update-webapp.sh` to get the
 current `waydroid-webapp.service` template.
+
+**An in-UI update "restarts" but never reports success - the "Update"
+button keeps showing the old commit as installed, and a retry says "An
+update is already in progress"** - `update-webapp.sh` calls `systemctl
+restart waydroid-webapp` on *itself* partway through applying an
+update triggered from the UI (`actions/update.py` launches it as a
+detached child of a gunicorn worker). With systemd's default
+`KillMode=control-group`, that restart kills every process left in the
+unit's cgroup, including the detached script - even though it survived
+being reparented (`start_new_session=True`), it's still in the same
+cgroup. So it dies right as it calls `systemctl restart`, before it
+ever reaches the post-restart `/api/health` check or records the new
+version, even though the restart itself (and the file sync before it)
+already succeeded - the webapp is quietly running the new code the
+whole time. Fixed by adding `KillMode=process` to
+`5-webapp/waydroid-webapp.service`, so systemd only ever signals
+gunicorn's own master process on restart/stop, leaving the detached
+update script alone to finish the job. Companion fix in
+`actions/update.py`: `apply_update()` now checks whether the pid
+recorded alongside `"state": "running"` is still alive before refusing
+a second run, instead of trusting that string forever - so a run that
+died mid-flight for any reason (not just this one) doesn't leave every
+future update permanently blocked.
+
+To recover a container already stuck like this, without reinstalling
+anything: run `update-webapp.sh` directly from a shell rather than
+through the UI - since that invocation was never a child of the
+service in the first place, it isn't in its cgroup either, so its own
+`systemctl restart` call can't kill it regardless of `KillMode`. It
+will re-detect the same update, re-sync (a no-op, since the files are
+already current), restart the service, and this time actually reach
+the health check and write the real installed version:
+```bash
+pct exec <CTID> -- bash -c "cd /opt/waydroid-lxc-deploy/5-webapp && ./update-webapp.sh"
+```
+That alone clears both symptoms (the version mismatch and the stuck
+"already in progress" lock, since this run overwrites the status file
+with its own real outcome) even before redeploying the fixed code. To
+get `KillMode=process` itself, so a future in-UI update doesn't need
+this manual step, redeploy or re-run `install-webapp.sh`/
+`update-webapp.sh` to pick up the current `waydroid-webapp.service`
+template.

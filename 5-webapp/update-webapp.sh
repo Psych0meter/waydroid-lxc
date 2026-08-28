@@ -116,6 +116,7 @@ write_status() {
   cat > "${tmp}" <<EOF
 {
   "state": "$(json_escape "${state}")",
+  "pid": $$,
   "ref": "$(json_escape "${REF}")",
   "from": "$(json_escape "${CURRENT_VERSION}")",
   "to": "$(json_escape "${REMOTE_VERSION:-}")",

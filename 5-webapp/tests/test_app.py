@@ -458,7 +458,7 @@ class UpdateTest(WebappTestCase):
         self.assertIn("git: command not found", resp.get_json()["message"])
 
     def test_apply_starts_a_detached_background_process(self):
-        with mock.patch.object(update_module.subprocess, "Popen") as popen:
+        with mock.patch.object(update_module.subprocess, "Popen", return_value=mock.Mock(pid=12345)) as popen:
             resp = self.post("/api/update/apply")
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.get_json()["ok"])
@@ -476,23 +476,55 @@ class UpdateTest(WebappTestCase):
         # no-op) background process has actually run would still see
         # whatever STATUS_FILE held from a previous run (e.g. a stale
         # "success") and misreport it as this run's outcome. Popen is
-        # mocked to do nothing at all, so if this file ends up "running"
-        # it can only be because apply_update() wrote it directly.
+        # mocked to do nothing but return a pid, so if this file ends up
+        # "running" it can only be because apply_update() wrote it
+        # directly.
         with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
             f.write('{"state": "success", "from": "old", "to": "stale"}')
-        with mock.patch.object(update_module.subprocess, "Popen"):
+        with mock.patch.object(update_module.subprocess, "Popen", return_value=mock.Mock(pid=12345)):
             self.post("/api/update/apply")
         resp = self.get("/api/update/status")
         self.assertEqual(resp.get_json()["data"]["state"], "running")
 
     def test_apply_refuses_a_second_run_while_one_is_in_progress(self):
         with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
-            f.write('{"state": "running"}')
-        with mock.patch.object(update_module.subprocess, "Popen") as popen:
+            f.write('{"state": "running", "pid": 999999}')
+        with mock.patch.object(update_module, "_pid_is_running", return_value=True), \
+             mock.patch.object(update_module.subprocess, "Popen") as popen:
             resp = self.post("/api/update/apply")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("already in progress", resp.get_json()["message"])
         popen.assert_not_called()
+
+    def test_apply_allows_a_new_run_once_the_previous_pid_is_no_longer_running(self):
+        # Regression test: a "running" status left behind by a process
+        # that died without ever updating it - a host reboot, an OOM
+        # kill, `kill -9` by hand, or (before waydroid-webapp.service's
+        # KillMode=process) being caught by its own `systemctl restart`
+        # mid-update - must not permanently block every future update
+        # with "An update is already in progress."
+        with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
+            f.write('{"state": "running", "pid": 999999}')
+        with mock.patch.object(update_module, "_pid_is_running", return_value=False), \
+             mock.patch.object(update_module.subprocess, "Popen", return_value=mock.Mock(pid=12345)) as popen:
+            resp = self.post("/api/update/apply")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["ok"])
+        popen.assert_called_once()
+
+    def test_pid_is_running_rejects_nonexistent_pid(self):
+        self.assertFalse(update_module._pid_is_running(999999999))
+
+    def test_pid_is_running_rejects_non_int(self):
+        self.assertFalse(update_module._pid_is_running(None))
+        self.assertFalse(update_module._pid_is_running("not-a-pid"))
+
+    def test_pid_is_running_rejects_a_live_pid_that_isnt_update_webapp_sh(self):
+        # The test process itself is definitely alive, but it isn't
+        # update-webapp.sh - this is the pid-reuse guard: a stale
+        # STATUS_FILE naming a pid some unrelated process now holds
+        # must not be mistaken for the original run still going.
+        self.assertFalse(update_module._pid_is_running(os.getpid()))
 
     def test_status_is_idle_with_no_status_file(self):
         resp = self.get("/api/update/status")

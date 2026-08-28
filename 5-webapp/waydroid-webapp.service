@@ -20,6 +20,25 @@ ExecStart=__VENV_DIR__/bin/gunicorn --preload --chdir __APP_DIR__ -w 2 -b ${WEBA
 Restart=on-failure
 RestartSec=3
 User=root
+# KillMode=process (default is control-group): update-webapp.sh's own
+# self-invoked `systemctl restart waydroid-webapp` (see that script) is
+# itself a descendant of this unit - it was launched by a gunicorn
+# worker via actions/update.py's start_new_session=True (setsid), which
+# detaches it from this process's *process group* but NOT from this
+# unit's *cgroup*. With the default KillMode=control-group, systemd
+# kills every process left in the cgroup on restart - including that
+# detached script and whatever it's running (git clone, pip, curl) -
+# right as it calls `systemctl restart`, before it ever reaches the
+# post-restart health check or writes the final status/version. That
+# leaves update-status.json stuck on "running" forever (every later
+# apply attempt then fails with "An update is already in progress")
+# and installed-version never gets updated, even though the restart
+# itself (and the file sync before it) succeeded. KillMode=process
+# tells systemd to only ever signal the main process (gunicorn's
+# master/arbiter, which already manages its own workers' lifecycle) -
+# so the detached update script survives its own restart call and can
+# finish the job.
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target

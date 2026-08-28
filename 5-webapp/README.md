@@ -74,7 +74,11 @@ reloads itself once the new version is confirmed up. A failed update
 (rolled back automatically, same as the CLI) is reported in the dialog
 without reloading. Only one update can run at a time; `apply` refuses a
 second request while `/etc/waydroid-webapp/update-status.json` still
-says `"state": "running"`.
+says `"state": "running"` *and* the pid it recorded is still alive -
+so a run that never got to report its own outcome (host reboot, an
+`OOM` kill, or - before `KillMode=process`, see below - being caught by
+its own restart) doesn't permanently lock out every future update the
+way it otherwise would.
 
 ## Using it
 
@@ -319,6 +323,29 @@ of this repo (see the top-level README's "Security" section):
   `--preload` was added) doesn't need reinstalling - the token file
   already has a value on disk, so a plain `systemctl restart
   waydroid-webapp` is enough to get both workers reading the same one.
+* **The unit sets `KillMode=process`** so that `systemctl restart
+  waydroid-webapp` - which `update-webapp.sh` calls on itself partway
+  through applying an update triggered from the UI - only signals
+  gunicorn's own master process, not everything else in the unit's
+  cgroup. Without it (the systemd default, `control-group`), that
+  restart kills `update-webapp.sh` itself (it's a detached child of a
+  gunicorn worker, started via `start_new_session=True` in
+  `actions/update.py` - detached from the process *group*, but still
+  in the same cgroup) right as it calls `systemctl restart`, before it
+  reaches the post-restart health check or records the new version -
+  even though the restart (and the file sync before it) already
+  succeeded. That looks like "the update never finishes" in the UI and
+  leaves `installed-version` stuck on the old value forever. A
+  container already affected (deployed before `KillMode=process` was
+  added) can be fixed without reinstalling: run `update-webapp.sh`
+  directly once, from a shell rather than through the UI - since that
+  invocation isn't a descendant of the service's cgroup to begin with,
+  its own `systemctl restart` call can't kill it either way, so it
+  completes normally and records the real version. `apply_update()`
+  also no longer trusts a stale `"state": "running"` forever either way
+  (see "Only one update can run at a time" above) - together these mean
+  a run that dies mid-flight, for any reason, doesn't need manual
+  cleanup to unblock the next attempt.
 * **Favorites are stored in plain JSON**, unencrypted, at
   `/var/lib/waydroid-webapp/favorites.json` (mode 700 directory) -
   anyone with root on the container (or a backup of it) can read saved
