@@ -35,6 +35,20 @@ _KEY_CODES = {
     "power": 26,
     "volume_up": 24,
     "volume_down": 25,
+    # Added for host-keyboard passthrough (static/js/app.js's keydown
+    # handler on the focused screen image) - standard, stable Android
+    # KeyEvent constants (unchanged since early API levels).
+    "tab": 61,
+    "space": 62,  # sent as a keyevent rather than through send_text(),
+    # since send_text() rejects whitespace-only input (see its docstring/
+    # test_send_text_requires_nonempty) - that guard is for the manual
+    # "Send text" field, not a single space keystroke.
+    "escape": 111,
+    "delete": 112,  # forward delete, i.e. the dedicated 'Delete' key, not backspace
+    "up": 19,
+    "down": 20,
+    "left": 21,
+    "right": 22,
 }
 
 

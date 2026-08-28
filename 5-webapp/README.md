@@ -47,15 +47,27 @@ each entry re-applies its saved location with one click.
 
 The "Screen" panel below the map gives you a live view of the device:
 click "Start screen" to begin polling screenshots over adb, click/drag on
-the image to tap or swipe (drag distance under 15px counts as a tap), and
-use the text field or the Back/Home/Recents buttons to send input - see
-"Screen: remote control" below for how this works. The refresh rate is
-adaptive: it automatically speeds up to 4 polls/second for a few seconds
-after each tap/swipe/key/text, then settles back down to an "idle" rate
-you control with the drag bar above the image (0.2s-3s, default 1s) - so
-it feels closer to a live feed while you're actually interacting, without
-polling that fast (and taxing adb/the container) while you're just
-watching.
+the image to tap or swipe (drag distance under 15px counts as a tap), use
+the text field or the Back/Home/Recents buttons to send input, or click
+the image once and just type on your own keyboard - it forwards
+keystrokes directly (letters/digits/punctuation as typed text, plus
+Backspace/Enter/Tab/Escape/Delete/arrows/Space as proper key events) to
+whatever's focused on the device, the same as a keyboard plugged into it.
+The image shows a highlighted border while it has this keyboard focus;
+click anywhere else to release it back to normal page navigation. See
+"Screen: remote control" below for how both of these work.
+
+The refresh rate is adaptive by default: it automatically speeds up to
+4 polls/second for a few seconds after each tap/swipe/key/text, then
+settles back down to an "idle" rate you control with the drag bar above
+the image (0.2s-3s, default 1s) - so it feels closer to a live feed while
+you're actually interacting, without polling that fast (and taxing
+adb/the container) while you're just watching. For something closer to
+an actual video feed regardless of activity, check "Real-time" next to
+the drag bar - it polls continuously, back-to-back, as fast as the
+container can produce and the browser can decode frames (the indicator
+shows the achieved rate, e.g. "real-time (~8.0 fps)"); it's the most
+CPU/adb load of any mode, by design, so it's off by default.
 
 Or drive the API directly:
 
@@ -184,21 +196,43 @@ API-key-gated routes as everything else).
 
 * `GET /api/screen/screenshot` calls `AdbDevice.screenshot()` (adbutils
   wraps `adb exec-out screencap`) and returns the PNG bytes directly. The
-  frontend polls this at an adaptive rate while the Screen panel is open
-  - a fast 250ms while you're actively tapping/swiping/typing (recent
+  frontend polls this at an adaptive rate while the Screen panel is open:
+  a fast 250ms while you're actively tapping/swiping/typing (recent
   activity, tracked client-side), decaying after about 4 seconds of no
   input to an "idle" rate set by the drag bar (200ms-3000ms, default
-  1000ms) - converting each response to a `Blob` URL and revoking the
-  previous one so repeated polling doesn't leak memory.
+  1000ms) - or, with the "Real-time" checkbox on, continuous back-to-back
+  polling with no fixed delay at all (overrides both the boost and idle
+  rates; falls back to the 250ms rate after a failed request instead of
+  retrying in a tight error loop). Every fetched frame is converted to a
+  `Blob` URL and the previous one revoked, so a long polling session
+  doesn't leak one blob per screenshot.
 * `POST /api/screen/tap` / `/swipe` call `AdbDevice.click()` /
   `AdbDevice.swipe()`. The frontend disambiguates a single
   pointerdown/pointerup pair by drag distance (in device-pixel space,
   scaled from the displayed image's `naturalWidth`/`naturalHeight` vs.
   its on-screen size): under 15px is a tap, otherwise a swipe.
 * `POST /api/screen/text` calls `AdbDevice.send_keys()`; `POST
-  /api/screen/key` calls `AdbDevice.keyevent()` for a small fixed set of
-  named keys (`back`, `home`, `recents`, `enter`, `backspace`, `power`,
-  `volume_up`, `volume_down`) rather than accepting arbitrary keycodes.
+  /api/screen/key` calls `AdbDevice.keyevent()` for a fixed set of named
+  keys (`back`, `home`, `recents`, `enter`, `backspace`, `power`,
+  `volume_up`, `volume_down`, `tab`, `space`, `escape`, `delete`, `up`,
+  `down`, `left`, `right`) rather than accepting arbitrary keycodes.
+* **Host-keyboard passthrough**: clicking the screen image gives it
+  `tabindex="0"` focus (shown by a highlighted border), which arms a
+  `keydown` listener scoped to that element - so it only fires while the
+  image itself is focused, never stealing keystrokes meant for the
+  GPS/favorites fields or the API key dialog. Control keys (Backspace,
+  Enter, Tab, Escape, Delete, arrows, Space) map to `/api/screen/key` by
+  `event.code` (physical/layout-independent); anything else that
+  produces a single printable character goes to `/api/screen/text` via
+  `event.key`, which already reflects Shift/layout (e.g. Shift+1 -> `!`
+  on a US layout) with no separate Shift-tracking needed. A single space
+  goes through `/api/screen/key {"key": "space"}` rather than
+  `/api/screen/text`, since that route intentionally rejects
+  whitespace-only input (the guard against submitting a blank "Send
+  text" field). Keystrokes are queued and sent one at a time - each
+  waiting for the previous request to finish - so fast typing can't
+  arrive at the device out of order. Browser/OS shortcuts (anything with
+  Ctrl/Alt/Meta held) are left alone rather than intercepted.
 * Connection handling: `actions/screen.py` first checks
   `adbutils.adb.device_list()` (never raises, even with zero devices
   connected) and only runs `waydroid adb connect` (the same reconnect

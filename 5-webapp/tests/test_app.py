@@ -355,6 +355,38 @@ class ScreenTest(WebappTestCase):
         self.assertEqual(resp.status_code, 200)
         device.keyevent.assert_called_once_with(4)
 
+    def test_send_key_keyboard_passthrough_keys(self):
+        # Covers the keys static/js/app.js's live host-keyboard capture
+        # sends via /api/screen/key (control keys - printable characters
+        # go through /api/screen/text instead, already covered above).
+        device = self._mock_device()
+        expected = {
+            "tab": 61,
+            "space": 62,
+            "escape": 111,
+            "delete": 112,
+            "up": 19,
+            "down": 20,
+            "left": 21,
+            "right": 22,
+        }
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            for key, code in expected.items():
+                device.keyevent.reset_mock()
+                resp = self.post("/api/screen/key", {"key": key})
+                self.assertEqual(resp.status_code, 200, key)
+                device.keyevent.assert_called_once_with(code)
+
+    def test_send_text_single_space_is_rejected(self):
+        # A literal space typed via the live keyboard has to go through
+        # /api/screen/key {"key": "space"} instead (see actions/screen.py)
+        # - send_text() intentionally rejects whitespace-only text (it's
+        # the guard against submitting a blank "Send text" field).
+        device = self._mock_device()
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/text", {"text": " "})
+        self.assertEqual(resp.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

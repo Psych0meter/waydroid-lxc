@@ -274,6 +274,7 @@
   const screenRefreshRange = document.getElementById("screen-refresh-rate");
   const screenRefreshValueEl = document.getElementById("screen-refresh-value");
   const screenRefreshIndicatorEl = document.getElementById("screen-refresh-indicator");
+  const screenRealtimeToggle = document.getElementById("screen-realtime-toggle");
 
   let screenPolling = false;
   let screenTimer = null;
@@ -285,16 +286,22 @@
   // "just watching" rate the rest of the time - set by the drag bar. This
   // avoids hammering adb (and the CPU-constrained container) with fast
   // screencaps continuously, while still feeling responsive while in use.
+  // "Real-time" (below) overrides both with continuous back-to-back
+  // polling - as fast as fetch+decode allow, no fixed delay at all.
   const ACTIVE_POLL_INTERVAL_MS = 250;
   const ACTIVE_WINDOW_MS = 4000;
   let idlePollIntervalMs = parseInt(screenRefreshRange.value, 10) || 1000;
   let lastActivityAt = 0;
+  let realtimeMode = false;
+  let lastFrameAt = null;
+  let lastFrameIntervalMs = null;
 
   function isBoosted() {
     return Date.now() - lastActivityAt < ACTIVE_WINDOW_MS;
   }
 
   function currentPollInterval() {
+    if (realtimeMode) return 0;
     return isBoosted() ? ACTIVE_POLL_INTERVAL_MS : idlePollIntervalMs;
   }
 
@@ -308,6 +315,12 @@
       screenRefreshIndicatorEl.className = "";
       return;
     }
+    if (realtimeMode) {
+      const fps = lastFrameIntervalMs ? (1000 / lastFrameIntervalMs).toFixed(1) : "-";
+      screenRefreshIndicatorEl.textContent = `real-time (~${fps} fps)`;
+      screenRefreshIndicatorEl.className = "active";
+      return;
+    }
     const boosted = isBoosted();
     screenRefreshIndicatorEl.textContent = boosted
       ? `live (${formatSeconds(ACTIVE_POLL_INTERVAL_MS)})`
@@ -318,10 +331,11 @@
   // Called on every tap/swipe/key/text: switches to the fast rate right
   // away (rather than waiting for the next already-scheduled idle-rate
   // poll to fire) by cancelling and immediately re-arming the timer.
+  // No-op in real-time mode, which is already polling as fast as possible.
   function markActivity() {
     lastActivityAt = Date.now();
     updateRefreshIndicator();
-    if (screenPolling && screenTimer) {
+    if (screenPolling && screenTimer && !realtimeMode) {
       window.clearTimeout(screenTimer);
       screenTimer = window.setTimeout(pollScreen, ACTIVE_POLL_INTERVAL_MS);
     }
@@ -339,6 +353,18 @@
     updateRefreshIndicator();
   });
   screenRefreshValueEl.textContent = formatSeconds(idlePollIntervalMs);
+
+  screenRealtimeToggle.addEventListener("change", () => {
+    realtimeMode = screenRealtimeToggle.checked;
+    screenRefreshRange.disabled = realtimeMode;
+    lastFrameAt = null;
+    lastFrameIntervalMs = null;
+    if (screenPolling && screenTimer) {
+      window.clearTimeout(screenTimer);
+      screenTimer = window.setTimeout(pollScreen, 0);
+    }
+    updateRefreshIndicator();
+  });
 
   function setScreenStatus(message, kind) {
     screenStatusEl.textContent = message;
@@ -361,19 +387,28 @@
     if (screenObjectUrl) URL.revokeObjectURL(screenObjectUrl);
     screenObjectUrl = url;
     screenImg.src = url;
+    const now = performance.now();
+    lastFrameIntervalMs = lastFrameAt !== null ? now - lastFrameAt : null;
+    lastFrameAt = now;
   }
 
   async function pollScreen() {
     if (!screenPolling) return;
+    let failed = false;
     try {
       await fetchScreenshot();
       setScreenStatus("", "");
     } catch (err) {
+      failed = true;
       setScreenStatus(err.message, "error");
     }
     updateRefreshIndicator();
     if (screenPolling) {
-      screenTimer = window.setTimeout(pollScreen, currentPollInterval());
+      // In real-time mode a run of failures (e.g. the device briefly
+      // disconnected) would otherwise retry in a tight 0ms loop - fall
+      // back to the boosted interval instead of hammering the server.
+      const delay = failed && realtimeMode ? ACTIVE_POLL_INTERVAL_MS : currentPollInterval();
+      screenTimer = window.setTimeout(pollScreen, delay);
     }
   }
 
@@ -386,6 +421,8 @@
     screenPolling = true;
     screenToggleBtn.textContent = "Stop screen";
     lastActivityAt = Date.now(); // start at the fast rate, settle down after ACTIVE_WINDOW_MS
+    lastFrameAt = null;
+    lastFrameIntervalMs = null;
     pollScreen();
   }
 
@@ -430,6 +467,10 @@
   screenImg.addEventListener("pointerdown", (event) => {
     if (!screenPolling) return;
     markActivity();
+    // Gives the image keyboard focus so the keydown listener below starts
+    // receiving keystrokes (tabindex="0" in the HTML makes it focusable);
+    // #screen-img:focus in the CSS shows a border while this is active.
+    screenImg.focus();
     dragStart = toDeviceCoords(event);
     // Pointer capture keeps pointermove/pointerup targeting this element
     // even if the drag ends up outside its bounds (e.g. a fast swipe that
@@ -494,6 +535,64 @@
       fetchScreenshot();
     } catch (err) {
       setScreenStatus(err.message, "error");
+    }
+  });
+
+  // --- Host-keyboard passthrough --------------------------------------
+  // Click the screen once (pointerdown above calls screenImg.focus()) and
+  // type normally - keystrokes go to whatever's focused on the device,
+  // same as typing on a real keyboard plugged into it. Only fires while
+  // the image itself has focus, so it never steals keystrokes meant for
+  // the GPS/favorites fields, the API key dialog, or the "Send text" box.
+  //
+  // Physical/control keys map to /api/screen/key by event.code (layout-
+  // independent - Backspace is Backspace regardless of keyboard layout).
+  // Everything else that produces a single printable character is sent
+  // via /api/screen/text using event.key, which already accounts for
+  // Shift/layout (e.g. Shift+1 -> "!" on a US layout), so no separate
+  // Shift-tracking is needed.
+  const SCREEN_KEYDOWN_KEY_MAP = {
+    Backspace: "backspace",
+    Enter: "enter",
+    NumpadEnter: "enter",
+    Tab: "tab",
+    Escape: "escape",
+    Delete: "delete",
+    ArrowUp: "up",
+    ArrowDown: "down",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    Space: "space",
+  };
+
+  // Keystrokes are queued and sent one at a time (each waiting for the
+  // previous request to finish) rather than fired off in parallel, so
+  // fast typing can't arrive at the device out of order.
+  let screenKeySendQueue = Promise.resolve();
+  function queueScreenKeySend(action) {
+    screenKeySendQueue = screenKeySendQueue.then(action).catch((err) => {
+      setScreenStatus(err.message, "error");
+    });
+  }
+
+  screenImg.addEventListener("keydown", (event) => {
+    if (!screenPolling) return;
+    // Let real browser/OS shortcuts (Ctrl+C, Cmd+R, Alt+Tab, ...) through
+    // untouched rather than swallowing and forwarding them as text.
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+    const mappedKey = SCREEN_KEYDOWN_KEY_MAP[event.code];
+    if (mappedKey) {
+      event.preventDefault();
+      markActivity();
+      queueScreenKeySend(() => apiPost("/api/screen/key", { key: mappedKey }));
+      return;
+    }
+    if (event.key && event.key.length === 1) {
+      event.preventDefault();
+      markActivity();
+      const ch = event.key;
+      queueScreenKeySend(() => apiPost("/api/screen/text", { text: ch }));
     }
   });
 })();

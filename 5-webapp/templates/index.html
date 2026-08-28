@@ -66,18 +66,22 @@
         <button id="screen-toggle-btn" type="button">Start screen</button>
       </div>
       <p class="hint">
-        Tap the image to tap the device, drag to swipe. Speeds up
-        automatically for a few seconds after each tap/swipe/key, then
-        settles back to the idle rate below - still screenshot polling
-        underneath, not a real video feed.
+        Tap the image to tap the device, drag to swipe, click once then
+        type on your keyboard to send keystrokes directly (the image
+        shows a highlighted border while it has keyboard focus - click
+        elsewhere to release it). Speeds up automatically for a few
+        seconds after each tap/swipe/key, then settles back to the idle
+        rate below - still screenshot polling underneath, not a real
+        video feed, unless "Real-time" is on.
       </p>
       <div id="screen-refresh-control">
         <label for="screen-refresh-rate">Idle refresh rate: <span id="screen-refresh-value">1.0s</span></label>
         <input type="range" id="screen-refresh-rate" min="200" max="3000" step="100" value="1000">
+        <label id="screen-realtime-label"><input type="checkbox" id="screen-realtime-toggle"> Real-time</label>
         <span id="screen-refresh-indicator"></span>
       </div>
       <div id="screen-viewport">
-        <img id="screen-img" alt="Waydroid screen (not started)" draggable="false">
+        <img id="screen-img" alt="Waydroid screen (not started)" draggable="false" tabindex="0">
       </div>
       <div id="screen-controls">
         <div class="row">
