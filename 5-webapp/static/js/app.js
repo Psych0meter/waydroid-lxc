@@ -464,6 +464,8 @@
   const screenRefreshIndicatorEl = document.getElementById("screen-refresh-indicator");
   const screenRealtimeToggle = document.getElementById("screen-realtime-toggle");
   const screenLockStatusEl = document.getElementById("screen-lock-status");
+  const screenLockOverlay = document.getElementById("screen-lock-overlay");
+  const screenLockBtn = document.getElementById("screen-lock-btn");
   const screenUnlockPinInput = document.getElementById("screen-unlock-pin-input");
   const screenUnlockBtn = document.getElementById("screen-unlock-btn");
   const screenSetPinForm = document.getElementById("screen-set-pin-form");
@@ -604,8 +606,8 @@
 
   // Polled independently of the screenshot loop (see LOCK_STATUS_POLL_MS)
   // so a stuck/failing screenshot doesn't also freeze the lock indicator
-  // - the indicator is most useful exactly when the screen itself can't
-  // be captured.
+  // - the indicator (and the overlay/button states below) are most
+  // useful exactly when the screen itself can't be captured.
   async function pollLockStatus() {
     if (!screenPolling) return;
     try {
@@ -613,9 +615,21 @@
       const locked = !!(result.data && result.data.locked);
       screenLockStatusEl.textContent = "Lock: " + (locked ? "locked" : "unlocked");
       screenLockStatusEl.className = locked ? "locked" : "unlocked";
+      // Makes it obvious *why* the screen is frozen/blank - a
+      // FLAG_SECURE screencap failure looks identical to a stuck poll
+      // otherwise - and that the fix is the Unlock field, not a
+      // webapp/adb problem.
+      screenLockOverlay.classList.toggle("visible", locked);
+      // Grey out whichever action is already the current state.
+      screenLockBtn.disabled = locked;
+      screenUnlockBtn.disabled = !locked;
     } catch (err) {
+      // Unknown state - leave both actions available rather than
+      // risking either one stuck disabled on a transient error.
       screenLockStatusEl.textContent = "Lock: ?";
       screenLockStatusEl.className = "";
+      screenLockBtn.disabled = false;
+      screenUnlockBtn.disabled = false;
     }
     if (screenPolling) lockStatusTimer = window.setTimeout(pollLockStatus, LOCK_STATUS_POLL_MS);
   }
@@ -653,6 +667,9 @@
     dragStart = null;
     screenLockStatusEl.textContent = "Lock: -";
     screenLockStatusEl.className = "";
+    screenLockOverlay.classList.remove("visible");
+    screenLockBtn.disabled = false;
+    screenUnlockBtn.disabled = false;
     updateRefreshIndicator();
   }
 
@@ -758,6 +775,18 @@
       await apiPost("/api/screen/text", { text });
       screenTextInput.value = "";
       setScreenStatus("", "");
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
+
+  screenLockBtn.addEventListener("click", async () => {
+    markActivity();
+    try {
+      const result = await apiPost("/api/screen/lock", {});
+      setScreenStatus(result.message || "Locked.", "ok");
+      pollLockStatus();
       fetchScreenshot();
     } catch (err) {
       setScreenStatus(err.message, "error");

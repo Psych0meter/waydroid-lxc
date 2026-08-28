@@ -34,6 +34,11 @@
       </div>
       <div id="screen-viewport">
         <img id="screen-img" alt="Waydroid screen (not started)" draggable="false" tabindex="0">
+        <div id="screen-lock-overlay" role="status">
+          <span class="lock-icon" aria-hidden="true">&#128274;</span>
+          <p>Device is locked</p>
+          <p class="hint">Enter your PIN below to unlock.</p>
+        </div>
       </div>
       <div id="screen-controls">
         <div class="row">
@@ -53,6 +58,7 @@
             <span id="screen-lock-status">Lock: -</span> - best-effort, polled while the screen is open.
           </p>
           <div class="row">
+            <button type="button" id="screen-lock-btn" title="Lock the device now (sends the power button once)">Lock</button>
             <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-unlock-pin-input" placeholder="PIN" maxlength="16" autocomplete="off">
             <button type="button" id="screen-unlock-btn" title="Enter this PIN as real key events and submit it - reaches the lock screen even with no working screenshot">Unlock</button>
           </div>

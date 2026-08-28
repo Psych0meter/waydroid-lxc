@@ -631,6 +631,26 @@ class ScreenTest(WebappTestCase):
         self.assertEqual(resp.status_code, 400)
         device.keyevent.assert_not_called()
 
+    def test_lock_sends_power_keyevent_when_unlocked(self):
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=False)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/lock")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["data"]["locked"])
+        device.keyevent.assert_called_once_with(26)
+
+    def test_lock_does_nothing_when_already_locked(self):
+        # Mirrors unlock_with_pin()'s no-op-when-nothing-to-do behavior -
+        # also what lets the frontend grey out "Lock" when it applies.
+        device = self._mock_device()
+        self._mock_lock_and_power(device, locked=True)
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/lock")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Already locked", resp.get_json()["message"])
+        device.keyevent.assert_not_called()
+
 
 class UpdateTest(WebappTestCase):
     """

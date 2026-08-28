@@ -225,6 +225,27 @@ def lock_status() -> ActionResult:
     )
 
 
+def lock_screen() -> ActionResult:
+    """
+    Locks the device now by sending the power keyevent - the same as
+    pressing the power button once. If a PIN/pattern/password is set,
+    Android shows the keyguard as soon as the screen goes off, so this
+    reads as "locked" immediately rather than waiting for the idle
+    timeout (with no lock type set, it just turns the screen off).
+    Mirrors unlock_with_pin()'s no-op-when-nothing-to-do behavior - does
+    nothing but report if lock_status() already says locked - so the
+    frontend can grey out "Lock" the same way it greys out "Unlock".
+    """
+    device = _device()
+    if _is_locked(device):
+        return ActionResult(ok=True, message="Already locked.", data={"locked": True})
+    try:
+        device.keyevent(_KEY_CODES["power"])
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Lock failed: {exc}") from exc
+    return ActionResult(ok=True, message="Locked.", data={"locked": True})
+
+
 def set_pin(pin: object, old_pin: object = None) -> ActionResult:
     """
     Sets or changes the device's lock-screen PIN via 'locksettings

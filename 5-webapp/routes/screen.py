@@ -5,6 +5,7 @@ from flask import Blueprint, Response, jsonify, request
 from actions.base import ActionError
 from actions.screen import (
     kill_all_apps,
+    lock_screen,
     lock_status,
     screenshot,
     send_key,
@@ -119,6 +120,16 @@ def post_unlock():
     body = request.get_json(silent=True) or {}
     try:
         result = unlock_with_pin(pin=body.get("pin"))
+    except ActionError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify(result.to_dict())
+
+
+@screen_bp.post("/lock")
+@require_api_key
+def post_lock():
+    try:
+        result = lock_screen()
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     return jsonify(result.to_dict())

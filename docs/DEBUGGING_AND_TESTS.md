@@ -589,11 +589,16 @@ recovery:
   the same as `POST /api/screen/unlock {"pin": "..."}` directly. (Typing
   on the keyboard with the screen image focused still works too, but
   skips the wake/swipe steps - it's meant for a PIN pad already on
-  screen, e.g. right after "Set PIN".) The
-  "Lock: locked/unlocked" indicator next to it (`GET
-  /api/screen/lock-status`) is a best-effort read of `dumpsys window`,
-  not authoritative across every Android/Waydroid build - if it's ever
-  wrong, trust what actually happens on unlock over what it says.
+  screen, e.g. right after "Set PIN".) A "Device is locked" overlay
+  appears directly over the (frozen/blank) screen image whenever this
+  is the state, specifically so this failure mode doesn't read as a
+  broken screenshot - and disappears once `lock-status` confirms
+  you're unlocked. The "Lock: locked/unlocked" indicator (`GET
+  /api/screen/lock-status`) driving both that overlay and the
+  Lock/Unlock buttons' greyed-out state is a best-effort read of
+  `dumpsys window`, not authoritative across every Android/Waydroid
+  build - if it's ever wrong, trust what actually happens on unlock
+  over what it says.
   If the webapp itself isn't reachable (down, mid-redeploy, ...), the
   equivalent directly over adb is:
   ```bash

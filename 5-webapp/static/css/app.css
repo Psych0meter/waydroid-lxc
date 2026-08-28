@@ -97,6 +97,16 @@ button {
 
 button:hover { filter: brightness(1.1); }
 
+/* Greyed out rather than just disabled-but-still-colored - used for
+   "Lock"/"Unlock" when lock-status already says that's the current
+   state (see app.js's pollLockStatus). */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+button:disabled:hover { filter: none; }
+
 #stop-btn, #screen-kill-all-btn { background: var(--danger); border-color: var(--danger); }
 
 #api-key-btn, #update-btn {
@@ -237,6 +247,7 @@ dialog form { gap: 0.6rem; }
 #screen-refresh-indicator.active { color: var(--accent); }
 
 #screen-viewport {
+  position: relative; /* anchors #screen-lock-overlay */
   display: flex;
   justify-content: center;
   background: var(--surface);
@@ -244,6 +255,30 @@ dialog form { gap: 0.6rem; }
   border-radius: 8px;
   min-height: 120px;
 }
+
+/* Shown whenever polling lock-status says locked (see app.js's
+   pollLockStatus) - makes it obvious *why* the screen is frozen/blank
+   (a FLAG_SECURE screencap failure looks identical to a stuck poll
+   otherwise) and that the fix is the Unlock field below, not a
+   webapp/adb problem. Doesn't block clicks/keystrokes to the image
+   underneath - it's informational, not a modal. */
+#screen-lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  text-align: center;
+  padding: 1rem;
+  background: rgba(13, 17, 23, 0.75); /* --surface, translucent */
+  border-radius: 8px;
+  pointer-events: none;
+}
+#screen-lock-overlay.visible { display: flex; }
+#screen-lock-overlay p { margin: 0; }
+#screen-lock-overlay .lock-icon { font-size: 2rem; line-height: 1; }
 
 #screen-img {
   max-width: 100%;

@@ -120,12 +120,18 @@ system screen.
 
 Below the text field, the "Lock: locked/unlocked" indicator shows the
 device's keyguard state (best-effort - see `GET /api/screen/lock-status`
-below). "Unlock" enters a PIN typed into the field next to it and works
+below); a matching overlay appears directly over the screen image
+whenever it says locked, so a frozen/blank screen reads as "device is
+locked, enter your PIN below" rather than looking like a broken
+screenshot. "Lock" locks the device immediately (sends the power button
+once); "Unlock" enters a PIN typed into the field next to it and works
 even with a completely broken screenshot and no need to navigate to the
 PIN pad yourself first - it wakes the device if needed, swipes past the
 lock screen's clock/notification curtain, then types the PIN via the
 same digit-KeyEvent mechanism as typing directly into the Screen panel
-(see "Screen: remote control", below). "Set PIN" runs `locksettings
+(see "Screen: remote control", below). Each button greys itself out
+when it's already the current state (Lock once locked, Unlock once
+unlocked), tracking the same indicator. "Set PIN" runs `locksettings
 set-pin` for you - the same thing as running it by hand over adb - to
 set a PIN for the first time or change an existing one (enter the
 current PIN in "Current PIN" when changing one; leave it blank when
@@ -201,6 +207,8 @@ curl -X POST http://127.0.0.1:8088/api/screen/set-pin \
 curl -X POST http://127.0.0.1:8088/api/screen/unlock \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
   -d '{"pin": "1234"}'
+
+curl -X POST http://127.0.0.1:8088/api/screen/lock -H "X-API-Key: <token>"
 
 curl -X POST http://127.0.0.1:8088/api/screen/text \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
@@ -337,7 +345,16 @@ goes through the same API-key-gated routes as everything else.
   not authoritative - there's no single flag guaranteed present across
   every Android/Waydroid build. The Screen panel polls it every 3s
   (separately from, and slower than, the screenshot poll) to show a
-  "Lock: locked/unlocked" indicator.
+  "Lock: locked/unlocked" indicator, overlay a "Device is locked - enter
+  your PIN below to unlock" message directly over the screen image while
+  locked (a `screenshot -p`/`FLAG_SECURE` failure otherwise looks
+  identical to a plain stuck poll), and grey out "Lock"/"Unlock"
+  whichever one is already the current state.
+* `POST /api/screen/lock` sends the power keyevent (`AdbDevice.keyevent`)
+  once - the same as pressing the power button - which shows the
+  keyguard immediately (rather than waiting for the idle timeout) if a
+  PIN/pattern/password is set. Checks `lock-status` first and no-ops if
+  already locked, same as `unlock`'s no-op when already unlocked.
 * `POST /api/screen/unlock` takes `{"pin": "..."}`, checks
   `lock-status` first (does nothing but report if already unlocked, so
   it can't type stray digits into whatever's actually focused), wakes
