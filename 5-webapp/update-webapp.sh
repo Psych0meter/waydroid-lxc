@@ -17,8 +17,16 @@
 # the webapp; re-run 0-deploy-all.sh or the other per-step scripts for
 # the rest of the deployment.
 #
-# Usage: ./update-webapp.sh [--check] [--ref <branch>] [--force]
+# Every apply attempt (not --check) writes its outcome as JSON to
+# $WEBAPP_UPDATE_STATUS_FILE (default: /etc/waydroid-webapp/update-status.json)
+# - this is how the webapp's own "Update" button (actions/update.py,
+# routes/update.py) launches this script in the background and polls
+# for the result across its own restart. Safe to ignore for manual use.
+#
+# Usage: ./update-webapp.sh [--check [--json]] [--ref <branch>] [--force]
 #   --check         Report whether an update is available; don't apply it.
+#   --json          With --check: print one machine-readable JSON line
+#                    to stdout instead of the human-readable summary.
 #   --ref <branch>  Git ref to track (default: main, or $WEBAPP_UPDATE_REF).
 #   --force         Re-sync even if already on the latest commit.
 #   WEBAPP_REPO_URL Repo to update from (default: this project's GitHub).
@@ -32,20 +40,37 @@ fi
 REPO_URL="${WEBAPP_REPO_URL:-https://github.com/Psych0meter/waydroid-lxc.git}"
 REF="${WEBAPP_UPDATE_REF:-main}"
 CHECK_ONLY=0
+JSON_OUTPUT=0
 FORCE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
+    --json) JSON_OUTPUT=1; shift ;;
     --ref) REF="$2"; shift 2 ;;
     --force) FORCE=1; shift ;;
     -h|--help)
-      echo "Usage: $0 [--check] [--ref <branch>] [--force]"
+      echo "Usage: $0 [--check [--json]] [--ref <branch>] [--force]"
       exit 0
       ;;
     *) echo "Error: unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+if [[ "${JSON_OUTPUT}" -eq 1 && "${CHECK_ONLY}" -ne 1 ]]; then
+  echo "Error: --json only applies to --check." >&2
+  exit 1
+fi
+
+# Human-readable progress goes through this instead of a bare `echo` so
+# --check --json can suppress it and print pure JSON to stdout instead
+# (the caller - actions/update.py - only reads stdout, so this doubles
+# as where errors before the JSON line would otherwise go).
+log() {
+  if [[ "${JSON_OUTPUT}" -ne 1 ]]; then
+    echo "$@"
+  fi
+}
 
 # --- Locate the current install from the deployed systemd unit -------------
 # install-webapp.sh renders __APP_DIR__/__VENV_DIR__ into this file, so it's
@@ -66,29 +91,73 @@ fi
 
 CONF_DIR="/etc/waydroid-webapp"
 VERSION_FILE="${CONF_DIR}/installed-version"
+STATUS_FILE="${WEBAPP_UPDATE_STATUS_FILE:-${CONF_DIR}/update-status.json}"
 CURRENT_VERSION="$(cat "${VERSION_FILE}" 2>/dev/null || echo "unknown")"
 
-echo "Checking ${REPO_URL} (${REF}) for updates..."
+# Minimal escaping for the fixed set of values ever written here (SHAs,
+# refs, ISO timestamps, our own short messages) - not a general-purpose
+# JSON encoder, but REPO_URL/REF/error text can contain arbitrary
+# characters (operator-set env vars, subprocess output), so escape
+# rather than assume.
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
+write_status() {
+  # write_status <state> [stage] [error]
+  local state="$1" stage="${2:-}" error="${3:-}"
+  mkdir -p "$(dirname "${STATUS_FILE}")"
+  local tmp
+  tmp="$(mktemp)"
+  cat > "${tmp}" <<EOF
+{
+  "state": "$(json_escape "${state}")",
+  "ref": "$(json_escape "${REF}")",
+  "from": "$(json_escape "${CURRENT_VERSION}")",
+  "to": "$(json_escape "${REMOTE_VERSION:-}")",
+  "stage": "$(json_escape "${stage}")",
+  "error": "$(json_escape "${error}")",
+  "started_at": "$(json_escape "${UPDATE_STARTED_AT:-}")",
+  "finished_at": "$(json_escape "$(date -Iseconds)")"
+}
+EOF
+  mv "${tmp}" "${STATUS_FILE}"
+}
+
+log "Checking ${REPO_URL} (${REF}) for updates..."
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "${TMP_DIR}"; }
 trap cleanup EXIT
 
-if ! git clone --quiet --depth 1 --branch "${REF}" "${REPO_URL}" "${TMP_DIR}/repo"; then
-  echo "Error: failed to clone ${REPO_URL} (${REF}) - check network access and that the ref exists." >&2
+if ! git clone --quiet --depth 1 --branch "${REF}" "${REPO_URL}" "${TMP_DIR}/repo" 2>/tmp/update-webapp-clone.err; then
+  if [[ "${JSON_OUTPUT}" -eq 1 ]]; then
+    printf '{"error": "%s"}\n' "$(json_escape "failed to clone ${REPO_URL} (${REF})")"
+  else
+    echo "Error: failed to clone ${REPO_URL} (${REF}) - check network access and that the ref exists." >&2
+    cat /tmp/update-webapp-clone.err >&2
+  fi
   exit 1
 fi
 REMOTE_VERSION="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
 
-echo "Installed: ${CURRENT_VERSION}"
-echo "Latest:    ${REMOTE_VERSION} (${REF})"
+log "Installed: ${CURRENT_VERSION}"
+log "Latest:    ${REMOTE_VERSION} (${REF})"
 
-if [[ "${CURRENT_VERSION}" == "${REMOTE_VERSION}" && "${FORCE}" -eq 0 ]]; then
-  echo "Already up to date."
-  exit 0
-fi
+UPDATE_AVAILABLE=1
+[[ "${CURRENT_VERSION}" == "${REMOTE_VERSION}" ]] && UPDATE_AVAILABLE=0
 
 if [[ "${CHECK_ONLY}" -eq 1 ]]; then
-  if [[ "${CURRENT_VERSION}" == "unknown" ]]; then
+  if [[ "${JSON_OUTPUT}" -eq 1 ]]; then
+    printf '{"current": "%s", "latest": "%s", "ref": "%s", "update_available": %s}\n' \
+      "$(json_escape "${CURRENT_VERSION}")" "$(json_escape "${REMOTE_VERSION}")" \
+      "$(json_escape "${REF}")" "$([[ "${UPDATE_AVAILABLE}" -eq 1 ]] && echo true || echo false)"
+  elif [[ "${UPDATE_AVAILABLE}" -eq 0 ]]; then
+    echo "Already up to date."
+  elif [[ "${CURRENT_VERSION}" == "unknown" ]]; then
     echo "Update available (installed version unknown - typically means this"
     echo "was deployed via 0-deploy-all.sh, which doesn't track a version;"
     echo "the next non-check run will record one)."
@@ -98,11 +167,21 @@ if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   exit 0
 fi
 
+if [[ "${UPDATE_AVAILABLE}" -eq 0 && "${FORCE}" -eq 0 ]]; then
+  log "Already up to date."
+  write_status success
+  exit 0
+fi
+
 NEW_APP_DIR="${TMP_DIR}/repo/5-webapp"
 if [[ ! -d "${NEW_APP_DIR}" ]]; then
   echo "Error: ${REF} has no 5-webapp/ directory - refusing to update." >&2
+  write_status failed "cloning" "${REF} has no 5-webapp/ directory"
   exit 1
 fi
+
+UPDATE_STARTED_AT="$(date -Iseconds)"
+write_status running
 
 # --- Sync files, preserving what isn't part of the repo --------------------
 sync_tree() {
@@ -124,7 +203,7 @@ sync_tree() {
 }
 
 BACKUP_DIR="${APP_DIR}.prev"
-echo "Backing up the current install to ${BACKUP_DIR}..."
+log "Backing up the current install to ${BACKUP_DIR}..."
 rm -rf "${BACKUP_DIR}"
 cp -a "${APP_DIR}" "${BACKUP_DIR}"
 
@@ -135,21 +214,22 @@ rollback() {
   mv "${BACKUP_DIR}" "${APP_DIR}"
   systemctl daemon-reload 2>/dev/null || true
   systemctl restart waydroid-webapp 2>/dev/null || true
+  write_status failed "${STAGE}" "update failed during: ${STAGE}"
 }
 trap rollback ERR
 
 STAGE="syncing files into ${APP_DIR}"
-echo "Syncing new files into ${APP_DIR}..."
+log "Syncing new files into ${APP_DIR}..."
 sync_tree "${NEW_APP_DIR}" "${APP_DIR}" static
 sync_tree "${NEW_APP_DIR}/static" "${APP_DIR}/static" vendor
 find "${APP_DIR}" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 STAGE="reinstalling Python dependencies"
-echo "Reinstalling Python dependencies..."
+log "Reinstalling Python dependencies..."
 "${VENV_DIR}/bin/pip" install --upgrade -r "${APP_DIR}/requirements.txt" >/tmp/update-webapp-pip.log 2>&1
 
 STAGE="regenerating the systemd unit"
-echo "Regenerating the systemd unit..."
+log "Regenerating the systemd unit..."
 sed \
   -e "s|__APP_DIR__|${APP_DIR}|g" \
   -e "s|__VENV_DIR__|${VENV_DIR}|g" \
@@ -157,11 +237,17 @@ sed \
 systemctl daemon-reload
 
 STAGE="restarting waydroid-webapp"
-echo "Restarting waydroid-webapp..."
+log "Restarting waydroid-webapp..."
+# This kills whatever gunicorn worker (and, if this script was itself
+# launched by the webapp's own /api/update/apply, whatever Flask request
+# handler) is currently running - harmless as long as this script's own
+# process is detached from that service (systemd, or start_new_session=True
+# in actions/update.py's subprocess.Popen), so it survives to finish the
+# steps below and write the final status.
 systemctl restart waydroid-webapp
 
 STAGE="waiting for /api/health after restart"
-echo "Waiting for the webapp to come back up..."
+log "Waiting for the webapp to come back up..."
 WEBAPP_HOST="127.0.0.1"
 WEBAPP_PORT="8088"
 if [[ -f "${CONF_DIR}/webapp.env" ]]; then
@@ -184,5 +270,6 @@ fi
 trap - ERR
 echo "${REMOTE_VERSION}" > "${VERSION_FILE}"
 rm -rf "${BACKUP_DIR}"
-echo ""
-echo "Updated ${CURRENT_VERSION} -> ${REMOTE_VERSION} (${REF})."
+write_status success
+log ""
+log "Updated ${CURRENT_VERSION} -> ${REMOTE_VERSION} (${REF})."

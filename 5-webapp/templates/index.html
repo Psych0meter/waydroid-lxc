@@ -10,7 +10,10 @@
 <body>
   <header>
     <h1>Waydroid Control</h1>
-    <button id="api-key-btn" type="button" title="Set API key">API key</button>
+    <div class="row">
+      <button id="update-btn" type="button" title="Check for a webapp update">Update</button>
+      <button id="api-key-btn" type="button" title="Set API key">API key</button>
+    </div>
   </header>
 
   <main>
@@ -110,6 +113,16 @@
         <button type="button" id="api-key-cancel">Cancel</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="update-dialog">
+    <h2 class="section-heading" id="update-dialog-title">Update</h2>
+    <p id="update-dialog-message" class="status-line" role="status"></p>
+    <div class="row">
+      <button type="button" id="update-confirm-btn">Update</button>
+      <button type="button" id="update-cancel-btn">Not now</button>
+      <button type="button" id="update-close-btn" hidden>Close</button>
+    </div>
   </dialog>
 
   <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>

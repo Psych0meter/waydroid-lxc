@@ -24,11 +24,13 @@ def create_app() -> Flask:
     from routes.geocode import geocode_bp
     from routes.gps import gps_bp
     from routes.screen import screen_bp
+    from routes.update import update_bp
 
     app.register_blueprint(gps_bp, url_prefix="/api/gps")
     app.register_blueprint(geocode_bp, url_prefix="/api/geocode")
     app.register_blueprint(favorites_bp, url_prefix="/api/favorites")
     app.register_blueprint(screen_bp, url_prefix="/api/screen")
+    app.register_blueprint(update_bp, url_prefix="/api/update")
 
     @app.get("/")
     def index():

@@ -11,6 +11,13 @@
   const apiKeyDialog = document.getElementById("api-key-dialog");
   const apiKeyInput = document.getElementById("api-key-input");
   const apiKeyDialogMessage = document.getElementById("api-key-dialog-message");
+  const updateBtn = document.getElementById("update-btn");
+  const updateDialog = document.getElementById("update-dialog");
+  const updateDialogTitle = document.getElementById("update-dialog-title");
+  const updateDialogMessage = document.getElementById("update-dialog-message");
+  const updateConfirmBtn = document.getElementById("update-confirm-btn");
+  const updateCancelBtn = document.getElementById("update-cancel-btn");
+  const updateCloseBtn = document.getElementById("update-close-btn");
 
   function getApiKey() {
     return window.localStorage.getItem(API_KEY_STORAGE_KEY) || "";
@@ -279,13 +286,171 @@
     if (apiKeyDialog.returnValue !== "cancel") {
       setApiKey(apiKeyInput.value.trim());
       loadFavorites();
+      startUpdateChecks();
     }
   });
+
+  // --- Self-update ------------------------------------------------------
+  // Checking hits GitHub (a shallow git clone via update-webapp.sh), so
+  // it's a real network call, not instant - see actions/update.py.
+  // Applying restarts the webapp's own systemd service partway through,
+  // so the dialog can't just await one request: it starts the update,
+  // then polls /api/update/status (surviving the restart from the
+  // browser's side) until update-webapp.sh reports success or failure.
+  let pendingUpdateData = null;
+  let dismissedUpdateVersion = null;
+  let updatePolling = false;
+
+  function shortVersion(v) {
+    return v && v.length > 7 ? v.slice(0, 7) : v || "unknown";
+  }
+
+  function showUpdateAvailable(data) {
+    pendingUpdateData = data;
+    updateDialogTitle.textContent = "Update available";
+    updateDialogMessage.textContent =
+      `Installed ${shortVersion(data.current)} -> latest ${shortVersion(data.latest)} (${data.ref}). Update now?`;
+    updateDialogMessage.className = "status-line";
+    updateConfirmBtn.hidden = false;
+    updateCancelBtn.hidden = false;
+    updateCloseBtn.hidden = true;
+    if (!updateDialog.open) updateDialog.showModal();
+  }
+
+  function showUpdateMessage(title, message, kind) {
+    updateDialogTitle.textContent = title;
+    updateDialogMessage.textContent = message;
+    updateDialogMessage.className = "status-line " + (kind || "");
+    updateConfirmBtn.hidden = true;
+    updateCancelBtn.hidden = true;
+    updateCloseBtn.hidden = false;
+    if (!updateDialog.open) updateDialog.showModal();
+  }
+
+  async function fetchUpdateCheck() {
+    const result = await apiRequest("GET", "/api/update/check");
+    return result.data || {};
+  }
+
+  // Runs silently on load and periodically - a failed background check
+  // (e.g. the container has no network access to GitHub right now)
+  // shouldn't interrupt the user; the Update button still works for an
+  // explicit, visible retry. Only pops the dialog automatically the
+  // first time a given commit is seen, so "Not now" isn't immediately
+  // re-asked by the next periodic check.
+  async function autoCheckForUpdate() {
+    if (updatePolling) return;
+    try {
+      const data = await fetchUpdateCheck();
+      updateBtn.classList.toggle("has-update", !!data.update_available);
+      if (data.update_available && data.latest !== dismissedUpdateVersion) {
+        showUpdateAvailable(data);
+      }
+    } catch (err) {
+      // Silent - see comment above.
+    }
+  }
+
+  updateBtn.addEventListener("click", async () => {
+    showUpdateMessage("Update", "Checking for updates...", "");
+    updateCloseBtn.hidden = true;
+    try {
+      const data = await fetchUpdateCheck();
+      updateBtn.classList.toggle("has-update", !!data.update_available);
+      if (data.update_available) {
+        showUpdateAvailable(data);
+      } else {
+        showUpdateMessage("Update", `Already up to date (${shortVersion(data.current)}).`, "ok");
+      }
+    } catch (err) {
+      showUpdateMessage("Update", err.message, "error");
+    }
+  });
+
+  updateCancelBtn.addEventListener("click", () => {
+    if (pendingUpdateData) dismissedUpdateVersion = pendingUpdateData.latest;
+    updateDialog.close();
+  });
+  updateCloseBtn.addEventListener("click", () => {
+    updateDialog.close();
+  });
+
+  updateConfirmBtn.addEventListener("click", async () => {
+    updateConfirmBtn.hidden = true;
+    updateCancelBtn.hidden = true;
+    updateDialogTitle.textContent = "Updating...";
+    updateDialogMessage.textContent =
+      "This can take a minute - the webapp will restart automatically. Keep this tab open.";
+    updateDialogMessage.className = "status-line";
+    try {
+      await apiPost("/api/update/apply", {});
+    } catch (err) {
+      showUpdateMessage("Update failed", err.message, "error");
+      return;
+    }
+    pollUpdateStatus();
+  });
+
+  function pollUpdateStatus() {
+    if (updatePolling) return;
+    updatePolling = true;
+    const deadline = Date.now() + 3 * 60 * 1000;
+
+    const poll = async () => {
+      if (Date.now() > deadline) {
+        updatePolling = false;
+        showUpdateMessage(
+          "Update",
+          "Taking longer than expected. Check the container (journalctl -u waydroid-webapp) or reload the page.",
+          "error"
+        );
+        return;
+      }
+      let status = null;
+      try {
+        const result = await apiRequest("GET", "/api/update/status");
+        status = result.data;
+      } catch (err) {
+        // Expected while the service is restarting - keep polling.
+      }
+      if (status && status.state === "success") {
+        updatePolling = false;
+        updateBtn.classList.remove("has-update");
+        updateDialogTitle.textContent = "Update complete";
+        updateDialogMessage.textContent = `Updated to ${shortVersion(status.to)}. Reloading...`;
+        updateDialogMessage.className = "status-line ok";
+        window.setTimeout(() => window.location.reload(), 1200);
+        return;
+      }
+      if (status && status.state === "failed") {
+        updatePolling = false;
+        showUpdateMessage(
+          "Update failed",
+          `${status.error || "Unknown error"} - rolled back to the previous version.`,
+          "error"
+        );
+        return;
+      }
+      window.setTimeout(poll, 1500);
+    };
+    poll();
+  }
+
+  let updateChecksStarted = false;
+  function startUpdateChecks() {
+    if (updateChecksStarted) return;
+    updateChecksStarted = true;
+    autoCheckForUpdate();
+    window.setInterval(() => {
+      if (getApiKey()) autoCheckForUpdate();
+    }, 60 * 60 * 1000);
+  }
 
   if (!getApiKey()) {
     openApiKeyDialog("Set your API key to use this webapp.", "");
   } else {
     loadFavorites();
+    startUpdateChecks();
   }
 
   // --- Screen (see README, "Screen: remote control") --------------------

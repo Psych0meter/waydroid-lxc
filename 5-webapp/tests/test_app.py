@@ -43,12 +43,15 @@ os.chmod(_FAKE_SCRIPT, 0o755)
 os.environ["WAYDROID_TOOLS_DIR"] = _TOOLS_DIR
 os.environ["WEBAPP_TOKEN_FILE"] = os.path.join(_TMP, "api-token")
 os.environ["WEBAPP_DATA_DIR"] = os.path.join(_TMP, "data")
+os.environ["WEBAPP_UPDATE_STATUS_FILE"] = os.path.join(_TMP, "update-status.json")
+os.environ["WEBAPP_UPDATE_LOG_FILE"] = os.path.join(_TMP, "update.log")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module  # noqa: E402
 import auth  # noqa: E402
 import actions.screen as screen_module  # noqa: E402
+import actions.update as update_module  # noqa: E402
 
 
 class WebappTestCase(unittest.TestCase):
@@ -386,6 +389,131 @@ class ScreenTest(WebappTestCase):
         with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
             resp = self.post("/api/screen/text", {"text": " "})
         self.assertEqual(resp.status_code, 400)
+
+
+class UpdateTest(WebappTestCase):
+    """
+    actions.update shells out to update-webapp.sh rather than talking to
+    GitHub itself, so it's mocked at the subprocess level: subprocess.run
+    (check_update - synchronous, bounded) and subprocess.Popen
+    (apply_update - detached, fire-and-forget). get_status() just reads
+    STATUS_FILE directly, so those tests write it by hand.
+    """
+
+    def setUp(self):
+        super().setUp()
+        if os.path.exists(update_module.STATUS_FILE):
+            os.remove(update_module.STATUS_FILE)
+
+    def _fake_check_result(self, stdout, stderr=""):
+        result = mock.MagicMock()
+        result.stdout = stdout
+        result.stderr = stderr
+        return result
+
+    def test_check_requires_key(self):
+        resp = self.client.get("/api/update/check")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_apply_requires_key(self):
+        resp = self.client.post("/api/update/apply")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_status_requires_key(self):
+        resp = self.client.get("/api/update/status")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_check_reports_update_available(self):
+        fake = self._fake_check_result(
+            '{"current": "aaa", "latest": "bbb", "ref": "main", "update_available": true}\n'
+        )
+        with mock.patch.object(update_module.subprocess, "run", return_value=fake):
+            resp = self.get("/api/update/check")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["data"]
+        self.assertTrue(data["update_available"])
+        self.assertEqual(data["current"], "aaa")
+        self.assertEqual(data["latest"], "bbb")
+
+    def test_check_reports_up_to_date(self):
+        fake = self._fake_check_result(
+            '{"current": "aaa", "latest": "aaa", "ref": "main", "update_available": false}\n'
+        )
+        with mock.patch.object(update_module.subprocess, "run", return_value=fake):
+            resp = self.get("/api/update/check")
+        self.assertFalse(resp.get_json()["data"]["update_available"])
+
+    def test_check_surfaces_script_error(self):
+        fake = self._fake_check_result('{"error": "failed to clone https://example/repo.git (main)"}\n')
+        with mock.patch.object(update_module.subprocess, "run", return_value=fake):
+            resp = self.get("/api/update/check")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("failed to clone", resp.get_json()["message"])
+
+    def test_check_surfaces_non_json_output_as_error(self):
+        fake = self._fake_check_result("", stderr="git: command not found")
+        with mock.patch.object(update_module.subprocess, "run", return_value=fake):
+            resp = self.get("/api/update/check")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("git: command not found", resp.get_json()["message"])
+
+    def test_apply_starts_a_detached_background_process(self):
+        with mock.patch.object(update_module.subprocess, "Popen") as popen:
+            resp = self.post("/api/update/apply")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["ok"])
+        popen.assert_called_once()
+        args, kwargs = popen.call_args
+        self.assertEqual(args[0], [update_module.UPDATE_SCRIPT])
+        # The whole point: it has to survive this process (and the
+        # systemd service it runs under) being killed mid-update.
+        self.assertTrue(kwargs.get("start_new_session"))
+
+    def test_apply_writes_running_status_before_the_process_even_starts(self):
+        # Regression test: apply_update() must write "running" itself,
+        # synchronously, rather than leaving that to update-webapp.sh -
+        # otherwise a status poll landing before the (mocked-here-as-a-
+        # no-op) background process has actually run would still see
+        # whatever STATUS_FILE held from a previous run (e.g. a stale
+        # "success") and misreport it as this run's outcome. Popen is
+        # mocked to do nothing at all, so if this file ends up "running"
+        # it can only be because apply_update() wrote it directly.
+        with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
+            f.write('{"state": "success", "from": "old", "to": "stale"}')
+        with mock.patch.object(update_module.subprocess, "Popen"):
+            self.post("/api/update/apply")
+        resp = self.get("/api/update/status")
+        self.assertEqual(resp.get_json()["data"]["state"], "running")
+
+    def test_apply_refuses_a_second_run_while_one_is_in_progress(self):
+        with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
+            f.write('{"state": "running"}')
+        with mock.patch.object(update_module.subprocess, "Popen") as popen:
+            resp = self.post("/api/update/apply")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("already in progress", resp.get_json()["message"])
+        popen.assert_not_called()
+
+    def test_status_is_idle_with_no_status_file(self):
+        resp = self.get("/api/update/status")
+        self.assertEqual(resp.get_json()["data"], {"state": "idle"})
+
+    def test_status_reflects_the_status_file(self):
+        with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
+            f.write('{"state": "success", "from": "aaa", "to": "bbb", "ref": "main"}')
+        resp = self.get("/api/update/status")
+        data = resp.get_json()["data"]
+        self.assertEqual(data["state"], "success")
+        self.assertEqual(data["to"], "bbb")
+
+    def test_status_falls_back_to_idle_on_corrupt_status_file(self):
+        # A status file caught mid-write by update-webapp.sh (it writes
+        # via a tmp-file-then-mv, so this should be rare, but a reader
+        # shouldn't ever 500 over it) should read as idle, not crash.
+        with open(update_module.STATUS_FILE, "w", encoding="utf-8") as f:
+            f.write("{not valid json")
+        resp = self.get("/api/update/status")
+        self.assertEqual(resp.get_json()["data"], {"state": "idle"})
 
 
 if __name__ == "__main__":

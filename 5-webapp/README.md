@@ -58,6 +58,23 @@ installed version is recorded at
 `update-webapp.sh` run always applies (installing whatever's currently
 at the tracked ref) and records a real version from then on.
 
+### From the UI
+
+The same mechanism is also wired into the web UI: the "Update" button in
+the header checks GitHub and, on load and every hour after that, checks
+automatically - if a newer commit is available, a dialog offers to
+install it. Confirming calls `POST /api/update/apply`
+(`actions/update.py`), which launches `update-webapp.sh` as a detached
+background process and returns immediately, since applying the update
+restarts the very service handling the request. The page then polls
+`GET /api/update/status` - tolerating the brief connection drop while
+the service restarts - until the script reports success or failure, and
+reloads itself once the new version is confirmed up. A failed update
+(rolled back automatically, same as the CLI) is reported in the dialog
+without reloading. Only one update can run at a time; `apply` refuses a
+second request while `/etc/waydroid-webapp/update-status.json` still
+says `"state": "running"`.
+
 ## Using it
 
 Open the UI (see the URL `install-webapp.sh` prints) and click "API key"
@@ -165,11 +182,15 @@ actions/
   geocode.py      Wraps OpenStreetMap Nominatim (address -> coordinates).
   favorites.py    Named saved locations (JSON file store); "apply" calls actions/gps.py's set_location().
   screen.py       Screenshot/tap/swipe/text/key, via adbutils talking to the device directly.
+  update.py       Wraps update-webapp.sh - see "Updating" above. Not a run_script() action:
+                  apply_update() launches a detached background process instead of waiting
+                  for a result, since the update restarts this very process.
 routes/
   gps.py          Blueprint: HTTP glue for actions/gps.py.
   geocode.py      Blueprint: HTTP glue for actions/geocode.py.
   favorites.py    Blueprint: HTTP glue for actions/favorites.py.
   screen.py       Blueprint: HTTP glue for actions/screen.py.
+  update.py       Blueprint: HTTP glue for actions/update.py.
 templates/, static/  Leaflet-based single-page UI (vendored Leaflet, no CDN) plus the Screen panel's JS/CSS.
 ```
 
@@ -321,3 +342,11 @@ of this repo (see the top-level README's "Security" section):
   same supply-chain trust model as the `curl | bash` Waydroid installer
   (see the top-level README's Security section): only point it at a
   ref/fork you trust.
+* **`POST /api/update/apply` is API-key-gated like everything else, but
+  it's a bigger action than the rest of the API**: anyone with the key
+  can make it replace the webapp's own code (from the configured
+  `WEBAPP_REPO_URL`/ref) and restart the service. This is the same
+  capability `update-webapp.sh` already has when run by hand - the UI
+  route doesn't add new exposure, it just makes that action reachable
+  without a shell on the container, so the "treat the key like a
+  password" guidance above applies here more than anywhere else.

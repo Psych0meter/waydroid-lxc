@@ -78,9 +78,9 @@ if [[ ! -f "2-lxc-setup/sway-headless-config" ]]; then
   echo "MISSING FILE: 2-lxc-setup/sway-headless-config"
   FAIL=1
 fi
-for ref in requirements.txt waydroid-webapp.service app.py auth.py \
-           actions/base.py actions/gps.py actions/geocode.py actions/favorites.py actions/screen.py \
-           routes/gps.py routes/geocode.py routes/favorites.py routes/screen.py templates/index.html; do
+for ref in requirements.txt waydroid-webapp.service update-webapp.sh app.py auth.py \
+           actions/base.py actions/gps.py actions/geocode.py actions/favorites.py actions/screen.py actions/update.py \
+           routes/gps.py routes/geocode.py routes/favorites.py routes/screen.py routes/update.py templates/index.html; do
   if [[ ! -f "5-webapp/${ref}" ]]; then
     echo "MISSING FILE referenced by install-webapp.sh/app.py: 5-webapp/${ref}"
     FAIL=1
