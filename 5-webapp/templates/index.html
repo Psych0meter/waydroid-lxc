@@ -11,8 +11,8 @@
   <header>
     <h1>Waydroid Control</h1>
     <div class="row">
-      <button type="button" id="update-btn" title="Check for a webapp update">Update</button>
-      <button type="button" id="api-key-btn" title="Set API key">API key</button>
+      <button type="button" id="update-btn" class="icon-btn" title="Check for a webapp update" aria-label="Check for updates">&#8635;</button>
+      <button type="button" id="api-key-btn" class="icon-btn" title="Set API key" aria-label="Set API key">&#128273;</button>
     </div>
   </header>
 
@@ -20,7 +20,7 @@
     <section id="screen-panel">
       <div id="screen-header">
         <h2 class="section-heading">Screen</h2>
-        <button type="button" id="screen-toggle-btn">Start screen</button>
+        <button type="button" id="screen-toggle-btn" class="icon-btn" title="Start screen" aria-label="Start screen">&#9654;</button>
       </div>
       <p class="hint">
         Tap to tap, drag to swipe. Click the image once, then type to send
@@ -42,15 +42,15 @@
       </div>
       <div id="screen-controls">
         <div class="row">
-          <button type="button" id="screen-key-back">Back</button>
-          <button type="button" id="screen-key-home">Home</button>
-          <button type="button" id="screen-key-recents">Recents</button>
-          <button type="button" id="screen-kill-all-btn" title="Force-stop every third-party app - a way to recover a frozen/stuck app without needing the screen itself to work">Kill all apps</button>
+          <button type="button" id="screen-key-back" class="icon-btn" title="Back" aria-label="Back">&#8592;</button>
+          <button type="button" id="screen-key-home" class="icon-btn" title="Home" aria-label="Home">&#8962;</button>
+          <button type="button" id="screen-key-recents" class="icon-btn" title="Recent apps" aria-label="Recent apps">&#10697;</button>
+          <button type="button" id="screen-kill-all-btn" class="icon-btn" title="Kill all apps - force-stops every third-party app, a way to recover a frozen/stuck app without needing the screen itself to work" aria-label="Kill all apps">&#9209;</button>
         </div>
         <form id="screen-text-form">
           <div class="row">
             <input type="text" id="screen-text-input" placeholder="Type or paste text to send">
-            <button type="submit">Send text</button>
+            <button type="submit" class="icon-btn" title="Send text" aria-label="Send text">&#10148;</button>
           </div>
         </form>
         <div id="screen-lock-panel">
@@ -58,15 +58,15 @@
             <span id="screen-lock-status">Lock: -</span> - best-effort, polled while the screen is open.
           </p>
           <div class="row">
-            <button type="button" id="screen-lock-btn" title="Lock the device now (sends the power button once)">Lock</button>
+            <button type="button" id="screen-lock-btn" class="icon-btn" title="Lock - locks the device now (sends the power button once)" aria-label="Lock">&#128274;</button>
             <input type="password" inputmode="numeric" id="screen-unlock-pin-input" placeholder="PIN" maxlength="16" autocomplete="off">
-            <button type="button" id="screen-unlock-btn" title="Enter this PIN as real key events and submit it - reaches the lock screen even with no working screenshot">Unlock</button>
+            <button type="button" id="screen-unlock-btn" class="icon-btn" title="Unlock - enters this PIN as real key events and submits it, reaching the lock screen even with no working screenshot" aria-label="Unlock">&#128275;</button>
           </div>
           <form id="screen-set-pin-form">
             <div class="row">
               <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-new-pin-input" placeholder="New PIN (4-16 digits)" maxlength="16" autocomplete="off" required>
               <input type="password" inputmode="numeric" pattern="[0-9]*" id="screen-old-pin-input" placeholder="Current PIN (leave blank if none)" maxlength="16" autocomplete="off">
-              <button type="submit" title="Runs 'locksettings set-pin', same as doing it by hand">Set PIN</button>
+              <button type="submit" class="icon-btn" title="Set PIN - runs 'locksettings set-pin', same as doing it by hand" aria-label="Set PIN">&#128290;</button>
             </div>
           </form>
         </div>
@@ -75,9 +75,14 @@
     </section>
 
     <section id="map-panel">
-      <h2 class="section-heading">Location</h2>
-      <div id="map"></div>
-      <p class="hint">Click the map to set a location, or search an address below.</p>
+      <div id="map-header">
+        <h2 class="section-heading">Location</h2>
+        <button type="button" id="map-toggle-btn" class="icon-btn" title="Collapse Location" aria-label="Collapse Location">&#9662;</button>
+      </div>
+      <div id="map-body">
+        <div id="map"></div>
+        <p class="hint">Click the map to set a location, or search an address below.</p>
+      </div>
     </section>
 
     <section id="form-panel">
@@ -85,7 +90,7 @@
         <label for="address">Address</label>
         <div class="row">
           <input type="text" id="address" name="address" placeholder="e.g. Eiffel Tower, Paris">
-          <button type="submit">Search</button>
+          <button type="submit" class="icon-btn" title="Search" aria-label="Search">&#128269;</button>
         </div>
       </form>
 
@@ -100,8 +105,8 @@
         <input type="text" id="altitude" name="altitude" placeholder="35.0">
 
         <div class="row">
-          <button type="submit">Set location</button>
-          <button type="button" id="stop-btn">Stop</button>
+          <button type="submit" class="icon-btn" title="Set location" aria-label="Set location">&#128205;</button>
+          <button type="button" id="stop-btn" class="icon-btn" title="Stop sending location" aria-label="Stop sending location">&#9209;</button>
         </div>
       </form>
 
@@ -114,7 +119,7 @@
         <form id="save-favorite-form">
           <div class="row">
             <input type="text" id="favorite-name" placeholder="Name this location" maxlength="100">
-            <button type="submit">Save favorite</button>
+            <button type="submit" class="icon-btn" title="Save favorite" aria-label="Save favorite">&#11088;</button>
           </div>
           <p class="hint">Saves the coordinates currently entered above.</p>
         </form>

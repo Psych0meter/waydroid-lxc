@@ -41,7 +41,35 @@ main {
   main { grid-template-columns: 1fr; }
 }
 
-#map-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+/* Card treatment matching #screen-panel/#form-panel, not just a bare
+   heading - #map-header/#map-body split the same way #screen-header
+   does, so the collapse toggle (see app.js's setMapCollapsed) can hide
+   #map-body alone and leave the header/toggle visible. */
+#map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  /* Without this, the grid's default align-items:stretch re-expands
+     #map-panel to match #form-panel's height (its row sibling) the
+     moment #map-body collapses to nothing, undoing the collapse
+     visually - same fix #form-panel already uses, size to own content
+     instead of stretching to fill the row. */
+  align-self: start;
+}
+
+#map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#map-body { display: flex; flex-direction: column; gap: 0.5rem; }
+
+#map-panel.collapsed #map-body { display: none; }
 
 .section-heading {
   font-size: 0.85rem;
@@ -96,6 +124,24 @@ button {
 }
 
 button:hover { filter: brightness(1.1); }
+
+/* Icon-only buttons (see templates/index.html) - a fixed square that
+   doesn't stretch to fill a .row, so a row of these clusters compactly
+   instead of spreading across the full row width, and an input sharing
+   the row keeps its own flex:1 (below) to fill whatever space is left.
+   title/aria-label on each one carries the label that used to be the
+   button's visible text. */
+.icon-btn {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
 
 /* Greyed out rather than just disabled-but-still-colored - used for
    "Lock"/"Unlock" when lock-status already says that's the current
@@ -309,7 +355,6 @@ dialog form { gap: 0.6rem; }
 }
 
 #screen-controls { display: flex; flex-direction: column; gap: 0.5rem; }
-#screen-controls .row button { flex: 1; }
 /* Same 0.5rem gap as #screen-controls above, so its own children (hint,
    unlock row, set-pin form) don't stack with no spacing of their own. */
 #screen-lock-panel { display: flex; flex-direction: column; gap: 0.5rem; }

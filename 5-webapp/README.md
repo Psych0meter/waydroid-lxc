@@ -61,10 +61,10 @@ at the tracked ref) and records a real version from then on.
 
 ### From the UI
 
-The same mechanism is also wired into the web UI: the "Update" button in
-the header checks GitHub and, on load and every hour after that, checks
-automatically - if a newer commit is available, a dialog offers to
-install it. Confirming calls `POST /api/update/apply`
+The same mechanism is also wired into the web UI: the refresh-icon
+button in the header checks GitHub and, on load and every hour after
+that, checks automatically - if a newer commit is available, a dialog
+offers to install it. Confirming calls `POST /api/update/apply`
 (`actions/update.py`), which launches `update-webapp.sh` as a detached
 background process and returns immediately, since applying the update
 restarts the very service handling the request. The page then polls
@@ -82,9 +82,13 @@ way it otherwise would.
 
 ## Using it
 
-Open the UI (see the URL `install-webapp.sh` prints) and click "API key"
-to paste in the key it printed (also readable afterwards at
-`/etc/waydroid-webapp/api-token` on the container).
+Open the UI (see the URL `install-webapp.sh` prints) and click the key
+icon in the top right to paste in the API key it printed (also readable
+afterwards at `/etc/waydroid-webapp/api-token` on the container). Most
+buttons in this UI are icon-only, to keep the Screen panel especially
+from being crowded out by button labels - hover any of them for what it
+does (a `title` tooltip), or check with a screen reader (`aria-label`
+carries the same text).
 
 The "Screen" panel at the top gives you a live view of the device: click
 "Start screen" to begin polling screenshots over adb, click/drag on the
@@ -139,12 +143,15 @@ set a PIN for the first time or change an existing one (enter the
 current PIN in "Current PIN" when changing one; leave it blank when
 setting one for the first time).
 
-Below it, the "Location" panel controls GPS mock-location: click a point
-on the map, drag the marker, or search an address - "Set location" calls
-`change-location.sh` with the resulting coordinates. "Save favorite"
-saves whatever's currently in the coordinate fields under a name of your
-choice; the favorites list below it filters as you type and each entry
-re-applies its saved location with one click.
+Below it, the "Location" card controls GPS mock-location - same card
+treatment as the Screen panel above it, with its own collapse toggle
+(the chevron next to the heading) for when you just want the screen
+space back and aren't actively picking a point: click a point on the
+map, drag the marker, or search an address - the pin-icon button calls
+`change-location.sh` with the resulting coordinates. The star-icon
+button saves whatever's currently in the coordinate fields under a name
+of your choice; the favorites list below it filters as you type and
+each entry re-applies its saved location with one click.
 
 The refresh rate is adaptive by default: it automatically speeds up to
 4 polls/second for a few seconds after each tap/swipe/key/text, then

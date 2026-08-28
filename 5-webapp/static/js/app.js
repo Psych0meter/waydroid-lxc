@@ -86,6 +86,35 @@
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
+  // Collapses #map-body (see app.css) to just the header row, for
+  // screen space when you're not actively picking a location. Persisted
+  // across reloads the same way the API key is.
+  const mapPanel = document.getElementById("map-panel");
+  const mapToggleBtn = document.getElementById("map-toggle-btn");
+  const MAP_COLLAPSED_STORAGE_KEY = "waydroid-map-collapsed";
+
+  function setMapCollapsed(collapsed) {
+    mapPanel.classList.toggle("collapsed", collapsed);
+    const label = collapsed ? "Expand Location" : "Collapse Location";
+    mapToggleBtn.textContent = collapsed ? "▸" : "▾";
+    mapToggleBtn.title = label;
+    mapToggleBtn.setAttribute("aria-label", label);
+    window.localStorage.setItem(MAP_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
+    if (!collapsed) {
+      // The map was just laid out under display:none, so Leaflet
+      // measured a zero-size container - invalidateSize() re-measures
+      // it now that it's visible, otherwise tiles render cropped/blank
+      // until the next manual pan/zoom.
+      window.requestAnimationFrame(() => map.invalidateSize());
+    }
+  }
+
+  mapToggleBtn.addEventListener("click", () => {
+    setMapCollapsed(!mapPanel.classList.contains("collapsed"));
+  });
+
+  if (window.localStorage.getItem(MAP_COLLAPSED_STORAGE_KEY) === "1") setMapCollapsed(true);
+
   // Vendored marker icons (see install-webapp.sh) - Leaflet's default
   // icon paths assume a bundler that rewrites image URLs, which doesn't
   // apply here, so they're pointed at explicitly.
@@ -207,6 +236,7 @@
       deleteBtn.className = "favorite-delete";
       deleteBtn.textContent = "×";
       deleteBtn.title = `Delete "${fav.name}"`;
+      deleteBtn.setAttribute("aria-label", `Delete "${fav.name}"`);
       deleteBtn.addEventListener("click", () => deleteFavorite(fav.id));
 
       li.appendChild(applyBtn);
@@ -558,6 +588,16 @@
     updateRefreshIndicator();
   });
 
+  // Icon-only button (see templates/index.html) - swaps both the glyph
+  // and the title/aria-label together, since there's no visible text
+  // left to imply which action a bare "■" or "▶" means.
+  function setScreenToggleLabel(running) {
+    screenToggleBtn.textContent = running ? "■" : "▶"; // ■ stop-square, ▶ play-triangle
+    const label = running ? "Stop screen" : "Start screen";
+    screenToggleBtn.title = label;
+    screenToggleBtn.setAttribute("aria-label", label);
+  }
+
   function setScreenStatus(message, kind) {
     screenStatusEl.textContent = message;
     screenStatusEl.className = "status-line " + (kind || "");
@@ -638,7 +678,7 @@
       return;
     }
     screenPolling = true;
-    screenToggleBtn.textContent = "Stop screen";
+    setScreenToggleLabel(true);
     lastActivityAt = Date.now(); // start at the active rate
     lastFrameAt = null;
     lastFrameIntervalMs = null;
@@ -650,7 +690,7 @@
     screenPolling = false;
     if (screenTimer) window.clearTimeout(screenTimer);
     if (lockStatusTimer) window.clearTimeout(lockStatusTimer);
-    screenToggleBtn.textContent = "Start screen";
+    setScreenToggleLabel(false);
     // Hides the last frame rather than leaving it frozen on screen -
     // removing the attribute (not just clearing it) is what the
     // #screen-img[src] CSS rule keys off of to hide the element.
