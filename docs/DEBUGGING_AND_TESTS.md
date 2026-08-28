@@ -457,6 +457,32 @@ after the clone succeeds (pip install, the post-restart health check)
 rolls back automatically and leaves the previous install running - the
 "Update failed during: ..." line names the step that failed, and
 `journalctl -u waydroid-webapp` has the service's own logs. A
-deployment installed via `0-deploy-all.sh` has no version tracked
-initially, so its first `update-webapp.sh` run always applies (that's
-expected, not a bug) and records a real version from then on.
+deployment installed via `0-deploy-all.sh` records the host checkout's
+commit as installed (`WEBAPP_INSTALLED_VERSION`, passed through
+automatically); a deployment installed by running `install-webapp.sh`
+directly, without that variable set and from a directory that isn't
+itself a git checkout, has no version tracked initially, so its first
+`update-webapp.sh` run always applies (that's expected, not a bug) and
+records a real version from then on.
+
+**Some API requests randomly 401 even with the correct key** (most
+visibly: the API key dialog appears to "not save" - typing the key and
+clicking Save seems to work, then the very next action fails and the
+dialog reopens with "API key missing or invalid") - this is a first-boot
+race in gunicorn's 2 workers, fixed by running with `--preload`
+(`5-webapp/waydroid-webapp.service`): without it, each worker imports
+`auth.py` independently after forking, and if that happens before
+`api-token` exists, both can generate a *different* random token, with
+only one landing on disk - requests routed to the other worker then
+401 forever, regardless of what key is actually saved/displayed. A
+container deployed before this fix doesn't need reinstalling: the token
+file already has a value on disk, so a plain restart is enough to get
+both (freshly restarted, still non-`--preload`) workers reading the
+same one consistently:
+```bash
+pct exec <CTID> -- systemctl restart waydroid-webapp
+```
+To pick up `--preload` itself (belt-and-suspenders against the same
+class of race in general, not required for this specific symptom to go
+away), re-run `install-webapp.sh` or `update-webapp.sh` to get the
+current `waydroid-webapp.service` template.

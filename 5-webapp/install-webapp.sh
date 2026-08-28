@@ -17,6 +17,10 @@
 #                       standard 0-deploy-all.sh deployment).
 #   WEBAPP_DATA_DIR     Where favorites.json is stored (default
 #                       /var/lib/waydroid-webapp).
+#   WEBAPP_INSTALLED_VERSION  Commit to record as installed (set by
+#                       0-deploy-all.sh from the host checkout - see
+#                       update-webapp.sh). Falls back to SCRIPT_DIR's own
+#                       git commit if unset, then to "unknown".
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
@@ -90,14 +94,23 @@ WAYDROID_TOOLS_DIR=${WAYDROID_TOOLS_DIR}
 WEBAPP_DATA_DIR=${WEBAPP_DATA_DIR}
 EOF
 
-# Only set when SCRIPT_DIR is itself a git checkout (e.g. update-webapp.sh's
-# clone, or install-webapp.sh run directly from a git clone rather than a
-# 0-deploy-all.sh tar-push) - otherwise left as "unknown" so
-# update-webapp.sh knows to treat the next check as an update regardless of
-# what's actually running.
-INSTALLED_VERSION="unknown"
-if git -C "${SCRIPT_DIR}" rev-parse HEAD >/dev/null 2>&1; then
-  INSTALLED_VERSION="$(git -C "${SCRIPT_DIR}" rev-parse HEAD)"
+# Three ways to learn the commit actually being installed, in order:
+#   1. WEBAPP_INSTALLED_VERSION - 0-deploy-all.sh sets this from the git
+#      checkout it tarred up on the host, since REMOTE_DIR inside the
+#      container (where this script actually runs) is a plain tar
+#      extraction with no .git of its own.
+#   2. SCRIPT_DIR being a git checkout directly - true when this script
+#      is run from update-webapp.sh's own clone, or by hand from a git
+#      clone rather than through 0-deploy-all.sh.
+#   3. "unknown" - update-webapp.sh treats that as older than any
+#      tracked ref, so its next check always applies and records a real
+#      version from then on.
+INSTALLED_VERSION="${WEBAPP_INSTALLED_VERSION:-}"
+if [[ -z "${INSTALLED_VERSION}" ]]; then
+  INSTALLED_VERSION="unknown"
+  if git -C "${SCRIPT_DIR}" rev-parse HEAD >/dev/null 2>&1; then
+    INSTALLED_VERSION="$(git -C "${SCRIPT_DIR}" rev-parse HEAD)"
+  fi
 fi
 echo "${INSTALLED_VERSION}" > "${CONF_DIR}/installed-version"
 

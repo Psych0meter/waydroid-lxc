@@ -33,6 +33,7 @@ Environment variables (all optional, all re-runnable):
 | `WAYDROID_TOOLS_DIR`     | `/opt/waydroid-lxc-deploy/4-waydroid-tools`  | where `change-location.sh` lives |
 | `WEBAPP_DATA_DIR`        | `/var/lib/waydroid-webapp`                   | where `favorites.json` is stored |
 | `LEAFLET_VERSION`        | `1.9.4`                                      | pinned Leaflet release to vendor |
+| `WEBAPP_INSTALLED_VERSION` | the host checkout's commit, via `0-deploy-all.sh`; else unset | commit recorded as installed (see "Updating") |
 
 ## Updating
 
@@ -307,6 +308,17 @@ of this repo (see the top-level README's "Security" section):
   limiting or key rotation - treat the key like a password, and
   regenerate it by deleting that file and restarting the service if it
   leaks.
+* **gunicorn runs with `--preload`**, specifically so both of its 2
+  workers share one already-generated token instead of each importing
+  `auth.py` independently after forking: without it, a true first boot
+  (before `api-token` exists) is a real TOCTOU race where the two
+  workers can generate *different* tokens, only one of which ends up on
+  disk - every request that lands on the other worker then 401s even
+  with the correct key, which looks exactly like "the key isn't being
+  saved". A container already affected by this (deployed before
+  `--preload` was added) doesn't need reinstalling - the token file
+  already has a value on disk, so a plain `systemctl restart
+  waydroid-webapp` is enough to get both workers reading the same one.
 * **Favorites are stored in plain JSON**, unencrypted, at
   `/var/lib/waydroid-webapp/favorites.json` (mode 700 directory) -
   anyone with root on the container (or a backup of it) can read saved

@@ -274,7 +274,15 @@ fi
 WEBAPP_MSG="Skipped (--skip-webapp) - install with 5-webapp/install-webapp.sh"
 if [[ "${INSTALL_WEBAPP}" == "yes" ]]; then
   echo "    -> Installing the webapp (GPS control + adb-based screen control)..."
-  if pct exec "${CTID}" -- env "WEBAPP_EXPOSE_LAN=${WEBAPP_EXPOSE_LAN}" \
+  # The payload pushed into the container (REMOTE_DIR, above) is a plain
+  # tar extraction, not a git checkout, so install-webapp.sh has no
+  # commit of its own to record - but THIS checkout (SCRIPT_DIR, on the
+  # host) usually does. Passing it through means update-webapp.sh's
+  # first check reports the commit actually deployed instead of
+  # "unknown" (which it otherwise falls back to, and which is always
+  # treated as older than any tracked ref).
+  HOST_GIT_VERSION="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || echo "unknown")"
+  if pct exec "${CTID}" -- env "WEBAPP_EXPOSE_LAN=${WEBAPP_EXPOSE_LAN}" "WEBAPP_INSTALLED_VERSION=${HOST_GIT_VERSION}" \
        bash -c "cd '${REMOTE_DIR}/5-webapp' && chmod +x install-webapp.sh && ./install-webapp.sh"; then
     WEBAPP_MSG="Ready"
   else
