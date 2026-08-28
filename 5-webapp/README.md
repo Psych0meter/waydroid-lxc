@@ -100,6 +100,18 @@ click anywhere else to release it back to normal page navigation.
 last frame frozen on screen. See "Screen: remote control" below for how
 both of these work.
 
+"Kill all apps" force-stops every third-party app on the device
+(`pm list packages -3` + `am force-stop` on each) - a recovery button for
+a frozen or stuck foreground app. Unlike using Recents to close apps by
+hand, it doesn't depend on the screen actually working, which is exactly
+the situation it's usually reached for: some system UI (a `FLAG_SECURE`
+screen especially - see the note about setting a screen lock, below) can
+leave `screenshot`/adb screencap unable to capture anything until you
+navigate away, and Back/Home (also adb-based, not screen-dependent)
+don't always get you out. It only touches third-party packages, not
+system ones like Settings/SystemUI, so it can't itself force-stop the
+thing that's stuck if that thing is a system screen.
+
 Below it, the "Location" panel controls GPS mock-location: click a point
 on the map, drag the marker, or search an address - "Set location" calls
 `change-location.sh` with the resulting coordinates. "Save favorite"
@@ -165,6 +177,9 @@ curl -X POST http://127.0.0.1:8088/api/screen/text \
 curl -X POST http://127.0.0.1:8088/api/screen/key \
   -H "X-API-Key: <token>" -H "Content-Type: application/json" \
   -d '{"key": "back"}'
+
+# Screen: force-stop every third-party app (see "Kill all apps" above)
+curl -X POST http://127.0.0.1:8088/api/screen/kill-all -H "X-API-Key: <token>"
 ```
 
 Every response is JSON: `{"ok": true, "message": "...", "data": {...}}`
@@ -267,6 +282,13 @@ goes through the same API-key-gated routes as everything else.
   keys (`back`, `home`, `recents`, `enter`, `backspace`, `power`,
   `volume_up`, `volume_down`, `tab`, `space`, `escape`, `delete`, `up`,
   `down`, `left`, `right`) rather than accepting arbitrary keycodes.
+* `POST /api/screen/kill-all` lists installed third-party packages
+  (`pm list packages -3`) and `am force-stop`s each one, best-effort - a
+  package that fails to stop doesn't block the rest, and the response
+  reports whichever ones actually did. Recovery tool for a frozen or
+  stuck foreground app; unlike clearing Recents by hand, it works even
+  when `screenshot`/tap are themselves failing, since it never needs to
+  see or touch the screen.
 * **Host-keyboard passthrough**: clicking the screen image gives it
   `tabindex="0"` focus (shown by a highlighted border), which arms a
   `keydown` listener scoped to that element - so it only fires while the
@@ -389,3 +411,9 @@ of this repo (see the top-level README's "Security" section):
   route doesn't add new exposure, it just makes that action reachable
   without a shell on the container, so the "treat the key like a
   password" guidance above applies here more than anywhere else.
+* **`POST /api/screen/kill-all` force-stops every third-party app** -
+  same "bigger action, same key" caveat as `/api/update/apply`. It's
+  scoped to third-party packages specifically so it can't be used to
+  force-stop system components (Settings, SystemUI, etc.), but anything
+  you've installed for testing is fair game, including whatever you were
+  in the middle of using.

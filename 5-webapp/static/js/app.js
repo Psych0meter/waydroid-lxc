@@ -706,6 +706,17 @@
   document.getElementById("screen-key-home").addEventListener("click", () => sendScreenKey("home"));
   document.getElementById("screen-key-recents").addEventListener("click", () => sendScreenKey("recents"));
 
+  document.getElementById("screen-kill-all-btn").addEventListener("click", async () => {
+    markActivity();
+    try {
+      const result = await apiPost("/api/screen/kill-all", {});
+      setScreenStatus(result.message || "Killed all apps.", "ok");
+      fetchScreenshot();
+    } catch (err) {
+      setScreenStatus(err.message, "error");
+    }
+  });
+
   screenTextForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = screenTextInput.value;

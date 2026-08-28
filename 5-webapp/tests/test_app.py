@@ -443,6 +443,47 @@ class ScreenTest(WebappTestCase):
             resp = self.post("/api/screen/text", {"text": " "})
         self.assertEqual(resp.status_code, 400)
 
+    def test_kill_all_force_stops_every_third_party_package(self):
+        device = self._mock_device()
+        device.shell.return_value = (
+            "package:com.example.one\npackage:com.example.two\n"
+        )
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/kill-all")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload["data"]["stopped"], ["com.example.one", "com.example.two"])
+        self.assertIn("2", payload["message"])
+        device.shell.assert_any_call("pm list packages -3")
+        device.shell.assert_any_call(["am", "force-stop", "com.example.one"])
+        device.shell.assert_any_call(["am", "force-stop", "com.example.two"])
+
+    def test_kill_all_with_no_third_party_packages(self):
+        device = self._mock_device()
+        device.shell.return_value = ""
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/kill-all")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()["data"]["stopped"], [])
+
+    def test_kill_all_skips_a_package_that_fails_to_stop(self):
+        # One stubborn package failing to force-stop shouldn't block the
+        # rest - the response reports whatever actually succeeded.
+        device = self._mock_device()
+
+        def fake_shell(cmdargs):
+            if cmdargs == "pm list packages -3":
+                return "package:com.example.one\npackage:com.example.two\n"
+            if cmdargs == ["am", "force-stop", "com.example.one"]:
+                raise screen_module.adbutils.AdbError("boom")
+            return ""
+
+        device.shell.side_effect = fake_shell
+        with mock.patch.object(screen_module.adbutils.adb, "device_list", return_value=[device]):
+            resp = self.post("/api/screen/kill-all")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()["data"]["stopped"], ["com.example.two"])
+
 
 class UpdateTest(WebappTestCase):
     """

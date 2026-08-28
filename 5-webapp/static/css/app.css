@@ -97,7 +97,7 @@ button {
 
 button:hover { filter: brightness(1.1); }
 
-#stop-btn { background: var(--danger); border-color: var(--danger); }
+#stop-btn, #screen-kill-all-btn { background: var(--danger); border-color: var(--danger); }
 
 #api-key-btn, #update-btn {
   background: transparent;

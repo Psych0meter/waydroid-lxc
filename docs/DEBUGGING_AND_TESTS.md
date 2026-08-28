@@ -553,3 +553,45 @@ it spawned) is still showing up as left-over minutes later rather than
 clearing on the next restart, that's the actual problem worth chasing
 (check `ps aux` for a hung update, and `/var/log/waydroid-webapp-update.log`
 for where it stalled).
+
+**The Screen panel freezes on one frame and `journalctl -u
+waydroid-webapp` floods `screencap error: cannot identify image file
+<_io.BytesIO object at ...>`, repeating every poll and surviving a
+webapp restart** - this is `adb shell screencap -p` itself returning
+bytes that aren't a valid PNG, not a webapp/Python exception (there's
+no traceback - it's `adbutils` logging a warning and, since
+`actions/screen.py` calls `screenshot(error_ok=False)`, turning it into
+an `ActionError`/400 each time). Restarting `waydroid-webapp` doesn't
+touch what's actually on the Android screen, so it does nothing here by
+design. The known trigger is a `FLAG_SECURE` system surface - most
+reliably reproduced by **Settings -> Security -> Choose a screen lock ->
+PIN** (or Pattern/Password): Android intentionally blocks capture of
+credential-entry screens, and under Waydroid that comes back as
+malformed bytes instead of a clean black frame. Recovery, in order:
+1. Click **Back** or **Home** in the Screen panel - both go through
+   `adb shell input keyevent`, not screencap, so they work even while
+   the screenshot itself is failing. This gets you off the secure
+   screen and screenshots resume immediately.
+2. If that specific screen (a *system* surface - Settings/SystemUI) is
+   what's stuck, **Kill all apps** won't help - it only force-stops
+   third-party packages, deliberately never touching system components,
+   so it can't touch Settings' own credential-entry flow. It's for a
+   frozen or unresponsive *installed app*, not the lock-setup screen
+   itself.
+3. Last resort, if input also stops responding:
+   `pct exec <CTID> -- systemctl restart waydroid-session`, or a full
+   `pct reboot <CTID>`.
+
+If you don't specifically need a device lock for what you're testing,
+the simplest fix is to just leave it at **None** (the default) - a lock
+screen actively works against remote automation (it locks you out after
+the device idles), and this particular setup flow is the one part of it
+with known rendering trouble under Waydroid. If you do need one, setting
+it directly via adb, bypassing the broken UI entirely, is worth trying
+(not verified against every Android/Waydroid build - confirm it actually
+takes effect before relying on it; see the "`waydroid adb` is not a
+general adb proxy" note in Phase 5 for why this is `adb shell ...`, not
+`waydroid adb shell ...`):
+```bash
+pct exec <CTID> -- bash -c "waydroid adb connect >/dev/null 2>&1; adb shell locksettings set-pin <your-pin>"
+```

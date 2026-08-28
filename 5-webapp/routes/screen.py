@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, Response, jsonify, request
 
 from actions.base import ActionError
-from actions.screen import screenshot, send_key, send_text, swipe, tap
+from actions.screen import kill_all_apps, screenshot, send_key, send_text, swipe, tap
 from auth import require_api_key
 
 screen_bp = Blueprint("screen", __name__)
@@ -67,6 +67,16 @@ def post_key():
     body = request.get_json(silent=True) or {}
     try:
         result = send_key(body.get("key"))
+    except ActionError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify(result.to_dict())
+
+
+@screen_bp.post("/kill-all")
+@require_api_key
+def post_kill_all():
+    try:
+        result = kill_all_apps()
     except ActionError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     return jsonify(result.to_dict())

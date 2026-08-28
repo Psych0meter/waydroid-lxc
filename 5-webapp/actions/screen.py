@@ -163,3 +163,41 @@ def send_key(key: object) -> ActionResult:
     except adbutils.AdbError as exc:
         raise ActionError(f"Key event failed: {exc}") from exc
     return ActionResult(ok=True, message="Key sent.")
+
+
+def kill_all_apps() -> ActionResult:
+    """
+    Force-stops every third-party app ('pm list packages -3' - not
+    system packages like Settings/SystemUI, which force-stopping is far
+    riskier than helpful for). A recovery tool for a frozen or stuck
+    foreground app: the adb equivalent of swiping every card away in
+    Recents, but it doesn't depend on the screen actually working -
+    unlike Recents itself, which needs a working screenshot/tap to use,
+    the one thing this is often reached for. One stubborn package
+    failing to stop doesn't block the rest; the final tally is whatever
+    actually succeeded.
+    """
+    device = _device()
+    try:
+        listing = device.shell("pm list packages -3")
+    except adbutils.AdbError as exc:
+        raise ActionError(f"Couldn't list installed apps: {exc}") from exc
+
+    packages = [
+        line.split(":", 1)[1].strip()
+        for line in listing.splitlines()
+        if line.startswith("package:") and line.split(":", 1)[1].strip()
+    ]
+    stopped = []
+    for package in packages:
+        try:
+            device.shell(["am", "force-stop", package])
+            stopped.append(package)
+        except adbutils.AdbError:
+            continue  # best-effort - move on and report what did stop
+
+    return ActionResult(
+        ok=True,
+        message=f"Force-stopped {len(stopped)} app(s).",
+        data={"stopped": stopped},
+    )
