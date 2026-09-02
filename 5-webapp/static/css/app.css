@@ -170,7 +170,7 @@ button:disabled:hover { filter: none; }
 
 #stop-btn, #screen-kill-all-btn { background: var(--danger); border-color: var(--danger); }
 
-#api-key-btn, #update-btn {
+#api-key-btn, #update-btn, #waydroid-status-btn {
   background: transparent;
   border-color: var(--border);
   color: var(--muted);
@@ -181,6 +181,15 @@ button:disabled:hover { filter: none; }
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Colors both the dot glyph and the border, same "colored border, no
+   filled background" treatment as #update-btn.has-update above - a
+   status indicator, not an action button, so it shouldn't read as
+   "click me, I'm blue/red" the way the rest of .icon-btn does. Muted
+   (the default, from the shared rule above) until the first check
+   completes or while it can't be determined. */
+#waydroid-status-btn.status-ok { color: var(--ok); border-color: var(--ok); }
+#waydroid-status-btn.status-bad { color: var(--danger); border-color: var(--danger); }
 
 .row { display: flex; gap: 0.5rem; }
 .row input { flex: 1; }

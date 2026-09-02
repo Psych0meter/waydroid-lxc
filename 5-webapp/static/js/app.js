@@ -18,6 +18,12 @@
   const updateConfirmBtn = document.getElementById("update-confirm-btn");
   const updateCancelBtn = document.getElementById("update-cancel-btn");
   const updateCloseBtn = document.getElementById("update-close-btn");
+  const waydroidStatusBtn = document.getElementById("waydroid-status-btn");
+  const waydroidStatusDialog = document.getElementById("waydroid-status-dialog");
+  const waydroidStatusDialogTitle = document.getElementById("waydroid-status-dialog-title");
+  const waydroidStatusDialogMessage = document.getElementById("waydroid-status-dialog-message");
+  const waydroidRestartBtn = document.getElementById("waydroid-restart-btn");
+  const waydroidStatusCloseBtn = document.getElementById("waydroid-status-close-btn");
 
   function getApiKey() {
     return window.localStorage.getItem(API_KEY_STORAGE_KEY) || "";
@@ -318,6 +324,7 @@
       setApiKey(apiKeyInput.value.trim());
       loadFavorites();
       startUpdateChecks();
+      startWaydroidStatusChecks();
     }
   });
 
@@ -477,11 +484,132 @@
     }, 60 * 60 * 1000);
   }
 
+  // --- Waydroid status ----------------------------------------------
+  // The container, the Android session inside it, and this host's adb
+  // link to it - the three things every other action here depends on,
+  // and none of which a stuck screen/GPS action can itself recover
+  // from. Polled locally (systemctl + 'waydroid status', no network
+  // call), so a much shorter interval than the update check is cheap.
+  let lastWaydroidStatus = null;
+
+  function waydroidStatusDetailText(data) {
+    if (!data) return "Status unknown - see the browser console or try again.";
+    return [
+      `Container: ${data.container}`,
+      `Session unit: ${data.session_unit}`,
+      `Android session: ${data.session_running ? "running" : "not running"}`,
+      `ADB: ${data.adb_connected ? "connected" : "not connected"}`,
+    ].join("\n");
+  }
+
+  async function checkWaydroidStatus() {
+    try {
+      const result = await apiRequest("GET", "/api/waydroid/status");
+      const data = result.data || {};
+      lastWaydroidStatus = data;
+      waydroidStatusBtn.classList.toggle("status-ok", !!data.healthy);
+      waydroidStatusBtn.classList.toggle("status-bad", !data.healthy);
+      const label = data.healthy
+        ? "Waydroid: healthy"
+        : "Waydroid: not healthy - click for details";
+      waydroidStatusBtn.title = label;
+      waydroidStatusBtn.setAttribute("aria-label", label);
+    } catch (err) {
+      lastWaydroidStatus = null;
+      waydroidStatusBtn.classList.remove("status-ok");
+      waydroidStatusBtn.classList.add("status-bad");
+      waydroidStatusBtn.title = "Waydroid status unknown - click for details";
+      waydroidStatusBtn.setAttribute("aria-label", "Waydroid status unknown");
+    }
+  }
+
+  let waydroidStatusChecksStarted = false;
+  function startWaydroidStatusChecks() {
+    if (waydroidStatusChecksStarted) return;
+    waydroidStatusChecksStarted = true;
+    checkWaydroidStatus();
+    window.setInterval(() => {
+      if (getApiKey()) checkWaydroidStatus();
+    }, 20 * 1000);
+  }
+
+  waydroidStatusBtn.addEventListener("click", async () => {
+    waydroidStatusDialogTitle.textContent = "Waydroid status";
+    waydroidStatusDialogMessage.textContent = "Checking...";
+    waydroidStatusDialogMessage.className = "status-line";
+    waydroidRestartBtn.disabled = false;
+    if (!waydroidStatusDialog.open) waydroidStatusDialog.showModal();
+    await checkWaydroidStatus();
+    waydroidStatusDialogMessage.textContent = waydroidStatusDetailText(lastWaydroidStatus);
+    waydroidStatusDialogMessage.className =
+      "status-line " + (lastWaydroidStatus && lastWaydroidStatus.healthy ? "ok" : "error");
+  });
+
+  waydroidStatusCloseBtn.addEventListener("click", () => {
+    waydroidStatusDialog.close();
+  });
+
+  // Mirrors pollUpdateStatus()'s shape: fire the action, then poll
+  // get_status() (not the action's own response - restarting doesn't
+  // wait for Android to finish booting) until it reports healthy or a
+  // 2-minute deadline passes.
+  let waydroidRestartPolling = false;
+  function pollWaydroidStatusUntilHealthy() {
+    if (waydroidRestartPolling) return;
+    waydroidRestartPolling = true;
+    const deadline = Date.now() + 2 * 60 * 1000;
+
+    const poll = async () => {
+      await checkWaydroidStatus();
+      if (lastWaydroidStatus && lastWaydroidStatus.healthy) {
+        waydroidRestartPolling = false;
+        waydroidRestartBtn.disabled = false;
+        waydroidStatusDialogTitle.textContent = "Waydroid status";
+        waydroidStatusDialogMessage.textContent = "Healthy again.";
+        waydroidStatusDialogMessage.className = "status-line ok";
+        return;
+      }
+      if (Date.now() > deadline) {
+        waydroidRestartPolling = false;
+        waydroidRestartBtn.disabled = false;
+        waydroidStatusDialogTitle.textContent = "Waydroid status";
+        waydroidStatusDialogMessage.textContent =
+          "Still not healthy after 2 minutes - " +
+          waydroidStatusDetailText(lastWaydroidStatus) +
+          "\n\nCheck journalctl -u waydroid-session on the host.";
+        waydroidStatusDialogMessage.className = "status-line error";
+        return;
+      }
+      waydroidStatusDialogMessage.textContent =
+        waydroidStatusDetailText(lastWaydroidStatus) + "\n\nStill waiting...";
+      window.setTimeout(poll, 3000);
+    };
+    poll();
+  }
+
+  waydroidRestartBtn.addEventListener("click", async () => {
+    waydroidRestartBtn.disabled = true;
+    waydroidStatusDialogTitle.textContent = "Restarting Waydroid...";
+    waydroidStatusDialogMessage.textContent =
+      "This can take 30-60s while Android boots back up.";
+    waydroidStatusDialogMessage.className = "status-line";
+    try {
+      await apiPost("/api/waydroid/restart", {});
+    } catch (err) {
+      waydroidStatusDialogMessage.textContent = err.message;
+      waydroidStatusDialogMessage.className = "status-line error";
+      waydroidRestartBtn.disabled = false;
+      return;
+    }
+    pollWaydroidStatusUntilHealthy();
+  });
+
   if (!getApiKey()) {
     openApiKeyDialog("Set your API key to use this webapp.", "");
   } else {
     loadFavorites();
     startUpdateChecks();
+    startWaydroidStatusChecks();
   }
 
   // --- Screen (see README, "Screen: remote control") --------------------

@@ -55,7 +55,7 @@ import auth  # noqa: E402
 import actions.gps as gps_module  # noqa: E402
 import actions.screen as screen_module  # noqa: E402
 import actions.update as update_module  # noqa: E402
-
+import actions.waydroid_status as waydroid_status_module  # noqa: E402
 
 class WebappTestCase(unittest.TestCase):
     def setUp(self):
@@ -837,6 +837,129 @@ class UpdateTest(WebappTestCase):
         resp = self.get("/api/update/status")
         self.assertEqual(resp.get_json()["data"], {"state": "idle"})
 
+class WaydroidStatusTest(WebappTestCase):
+    """
+    actions.waydroid_status shells out to systemctl/waydroid for two of
+    its three checks (mocked at the subprocess.run level, dispatched on
+    argv, same approach as UpdateTest); the third - adb connectivity -
+    reuses ScreenTest's adbutils.adb.device_list mock point.
+    """
+
+    def _fake_run(self, container="active", session_unit="active", session_running=True, restart_ok=True, calls=None):
+        def run(args, **kwargs):
+            if calls is not None:
+                calls.append(list(args))
+            result = mock.MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            if args[:2] == ["systemctl", "is-active"]:
+                unit = args[2]
+                if unit == waydroid_status_module._CONTAINER_UNIT:
+                    result.stdout = container
+                elif unit == waydroid_status_module._SESSION_UNIT:
+                    result.stdout = session_unit
+                return result
+            if args[:2] == ["waydroid", "status"]:
+                result.stdout = "Session:\tRUNNING\n" if session_running else "Session:\tSTOPPED\n"
+                return result
+            if args[:2] == ["systemctl", "restart"]:
+                result.returncode = 0 if restart_ok else 1
+                result.stderr = "" if restart_ok else "boom"
+                return result
+            if args[:3] == ["waydroid", "adb", "connect"]:
+                return result
+            raise AssertionError(f"unexpected subprocess.run call: {args}")
+        return run
+
+    def test_status_requires_key(self):
+        resp = self.client.get("/api/waydroid/status")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_restart_requires_key(self):
+        resp = self.client.post("/api/waydroid/restart")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_status_healthy_when_everything_up(self):
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=self._fake_run()), \
+             mock.patch.object(waydroid_status_module.adbutils.adb, "device_list", return_value=[mock.MagicMock()]):
+            resp = self.get("/api/waydroid/status")
+        data = resp.get_json()["data"]
+        self.assertTrue(data["healthy"])
+        self.assertEqual(data["container"], "active")
+        self.assertEqual(data["session_unit"], "active")
+        self.assertTrue(data["session_running"])
+        self.assertTrue(data["adb_connected"])
+
+    def test_status_not_healthy_when_adb_disconnected(self):
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=self._fake_run()), \
+             mock.patch.object(waydroid_status_module.adbutils.adb, "device_list", return_value=[]):
+            resp = self.get("/api/waydroid/status")
+        data = resp.get_json()["data"]
+        self.assertFalse(data["healthy"])
+        self.assertFalse(data["adb_connected"])
+
+    def test_status_not_healthy_when_session_unit_inactive(self):
+        fake = self._fake_run(session_unit="inactive")
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=fake), \
+             mock.patch.object(waydroid_status_module.adbutils.adb, "device_list", return_value=[mock.MagicMock()]):
+            resp = self.get("/api/waydroid/status")
+        data = resp.get_json()["data"]
+        self.assertFalse(data["healthy"])
+        self.assertEqual(data["session_unit"], "inactive")
+
+    def test_status_not_healthy_when_android_session_not_running(self):
+        # waydroid-session.service can be active while the Android
+        # session inside it is still booting or has wedged - the unit
+        # being up and 'waydroid status' saying RUNNING are checked
+        # separately for exactly this case.
+        fake = self._fake_run(session_running=False)
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=fake), \
+             mock.patch.object(waydroid_status_module.adbutils.adb, "device_list", return_value=[mock.MagicMock()]):
+            resp = self.get("/api/waydroid/status")
+        data = resp.get_json()["data"]
+        self.assertFalse(data["healthy"])
+        self.assertEqual(data["session_unit"], "active")
+        self.assertFalse(data["session_running"])
+
+    def test_status_reports_unknown_when_systemctl_missing(self):
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=FileNotFoundError), \
+             mock.patch.object(waydroid_status_module.adbutils.adb, "device_list", return_value=[mock.MagicMock()]):
+            resp = self.get("/api/waydroid/status")
+        data = resp.get_json()["data"]
+        self.assertFalse(data["healthy"])
+        self.assertEqual(data["container"], "unknown")
+        self.assertEqual(data["session_unit"], "unknown")
+
+    def test_restart_success_restarts_units_and_reconnects_adb(self):
+        calls = []
+        fake = self._fake_run(calls=calls)
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=fake):
+            resp = self.post("/api/waydroid/restart")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["ok"])
+        self.assertEqual(
+            calls[0],
+            ["systemctl", "restart", waydroid_status_module._CONTAINER_UNIT, waydroid_status_module._SESSION_UNIT],
+        )
+        self.assertEqual(calls[1], ["waydroid", "adb", "connect"])
+
+    def test_restart_surfaces_systemctl_failure(self):
+        fake = self._fake_run(restart_ok=False)
+        with mock.patch.object(waydroid_status_module.subprocess, "run", side_effect=fake):
+            resp = self.post("/api/waydroid/restart")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("boom", resp.get_json()["message"])
+
+    def test_restart_times_out(self):
+        with mock.patch.object(
+            waydroid_status_module.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(cmd="systemctl", timeout=60),
+        ):
+            resp = self.post("/api/waydroid/restart")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Timed out", resp.get_json()["message"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

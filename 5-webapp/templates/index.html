@@ -11,6 +11,7 @@
   <header>
     <h1>Waydroid Control</h1>
     <div class="row">
+      <button type="button" id="waydroid-status-btn" class="icon-btn" title="Waydroid status" aria-label="Waydroid status">&#9679;</button>
       <button type="button" id="update-btn" class="icon-btn" title="Check for a webapp update" aria-label="Check for updates">&#8635;</button>
       <button type="button" id="api-key-btn" class="icon-btn" title="Set API key" aria-label="Set API key">&#128273;</button>
     </div>
@@ -143,6 +144,15 @@
         <button type="button" id="api-key-cancel">Cancel</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="waydroid-status-dialog">
+    <h2 class="section-heading" id="waydroid-status-dialog-title">Waydroid status</h2>
+    <p id="waydroid-status-dialog-message" class="status-line" role="status"></p>
+    <div class="row">
+      <button type="button" id="waydroid-restart-btn" title="Restarts the Waydroid container and session - takes 30-60s, and interrupts any screen/GPS action in progress">Restart Waydroid</button>
+      <button type="button" id="waydroid-status-close-btn">Close</button>
+    </div>
   </dialog>
 
   <dialog id="update-dialog">
