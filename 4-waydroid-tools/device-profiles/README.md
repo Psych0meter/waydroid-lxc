@@ -26,6 +26,27 @@ The only profile shipped by default. Its values are vendored from
 `spoof-device.sh` (GPLv3) instead of being downloaded from GitHub at
 install time - all credit for this property set goes to that project.
 
+## pixel-7-pro.prop
+
+Identity/build-fingerprint fields only, adapted from
+[yubunus/DeviceSpoofLab-Hooks](https://github.com/yubunus/DeviceSpoofLab-Hooks)'
+`device_profile.conf`. That project is an LSPosed module that spoofs
+identifiers at the app layer via runtime hooks - a different mechanism
+entirely from this repo's `waydroid_base.prop` injection - so its config
+file is not itself a valid profile here: only the same key set as
+`pixel-5.prop` was kept from it. The rest of that file (hardware/HAL,
+CPU/GPU, security-state, and dozens of other non-Android-property keys)
+must never be appended to `waydroid_base.prop` - several of those keys
+(`ro.hardware`, `ro.boot.hardware`, `ro.hardware.vulkan`/`gralloc`/`power`/`egl`,
+`ro.board.platform`) override values Waydroid's own image depends on to
+find its binder HAL modules, which is exactly what happened the first
+time this file was vendored verbatim: the container booted, but
+`waydroidplatform` never came up (`journalctl -u waydroid-session`
+looping on "Failed to get service waydroidplatform, trying again...").
+`ro.adb.secure=1`, also present in the upstream file, would separately
+have silently re-locked headless adb, undoing `enable-adb.sh`. See the
+comment block in `pixel-7-pro.prop` itself for the full list.
+
 ## Adding another device
 
 A search for other maintained, verifiable Waydroid device-spoof profiles
