@@ -1,0 +1,261 @@
+# DeviceSpoofLab-Hooks profile (default Google Pixel 7 Pro, Android 16).
+# The app writes a copy to /data/data/com.devicespooflab.hooks/files/device_profile.conf
+# on first launch. Blank identifier fields are generated or derived at runtime.
+# Vendored from https://github.com/yubunus/DeviceSpoofLab-Hooks/blob/main/device_profile.conf
+
+# Device identity
+ro.product.brand=google
+ro.product.manufacturer=Google
+ro.product.model=Pixel 7 Pro
+ro.product.name=cheetah
+ro.product.device=cheetah
+ro.product.board=cheetah
+ro.hardware=cheetah
+ro.board.platform=gs201
+ro.soc.manufacturer=Google
+ro.soc.model=gs201
+
+# Partition identity
+ro.product.product.brand=google
+ro.product.product.manufacturer=Google
+ro.product.product.model=Pixel 7 Pro
+ro.product.product.name=cheetah
+ro.product.product.device=cheetah
+ro.product.system.brand=google
+ro.product.system.manufacturer=Google
+ro.product.system.model=Pixel 7 Pro
+ro.product.system.name=cheetah
+ro.product.system.device=cheetah
+ro.product.system_ext.brand=google
+ro.product.system_ext.manufacturer=Google
+ro.product.system_ext.model=Pixel 7 Pro
+ro.product.system_ext.name=cheetah
+ro.product.system_ext.device=cheetah
+ro.product.vendor.brand=google
+ro.product.vendor.manufacturer=Google
+ro.product.vendor.model=Pixel 7 Pro
+ro.product.vendor.name=cheetah
+ro.product.vendor.device=cheetah
+ro.product.vendor_dlkm.brand=google
+ro.product.vendor_dlkm.manufacturer=Google
+ro.product.vendor_dlkm.model=Pixel 7 Pro
+ro.product.vendor_dlkm.name=cheetah
+ro.product.vendor_dlkm.device=cheetah
+ro.product.odm.brand=google
+ro.product.odm.manufacturer=Google
+ro.product.odm.model=Pixel 7 Pro
+ro.product.odm.name=cheetah
+ro.product.odm.device=cheetah
+ro.product.bootimage.brand=google
+ro.product.bootimage.manufacturer=Google
+ro.product.bootimage.model=Pixel 7 Pro
+ro.product.bootimage.name=cheetah
+ro.product.bootimage.device=cheetah
+ro.product.system_dlkm.brand=google
+ro.product.system_dlkm.manufacturer=Google
+ro.product.system_dlkm.model=Pixel 7 Pro
+ro.product.system_dlkm.name=cheetah
+ro.product.system_dlkm.device=cheetah
+
+# Build information
+ro.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.build.id=BP4A.250605.009
+ro.build.display.id=BP4A.250605.009
+build.id.prefix=BP4A
+ro.build.version.incremental=12621605
+ro.build.type=user
+ro.build.tags=release-keys
+ro.build.description=cheetah-user 16 BP4A.250605.009 12621605 release-keys
+ro.build.product=cheetah
+ro.build.device=cheetah
+ro.build.characteristics=nosdcard
+ro.build.flavor=cheetah-user
+ro.build.version.release=16
+ro.build.version.release_or_codename=16
+ro.build.version.release_or_preview_display=16
+ro.build.version.sdk=36
+ro.build.version.codename=REL
+ro.build.version.security_patch=2025-06-05
+
+# Partition build information
+ro.product.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.product.build.id=BP4A.250605.009
+ro.product.build.tags=release-keys
+ro.product.build.type=user
+ro.product.build.version.incremental=12621605
+ro.product.build.version.release=16
+ro.product.build.version.release_or_codename=16
+ro.product.build.version.sdk=36
+ro.system.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.system_ext.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.vendor.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.odm.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.bootimage.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.system_dlkm.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.vendor_dlkm.build.fingerprint=google/cheetah/cheetah:16/BP4A.250605.009/12621605:user/release-keys
+ro.vendor.build.version.release=16
+ro.vendor.build.version.release_or_codename=16
+ro.vendor_dlkm.build.version.release=16
+ro.vendor_dlkm.build.version.release_or_codename=16
+ro.odm.build.version.release=16
+ro.odm.build.version.release_or_codename=16
+ro.bootimage.build.version.release=16
+ro.bootimage.build.version.release_or_codename=16
+ro.system_dlkm.build.version.release=16
+ro.system_dlkm.build.version.release_or_codename=16
+
+# Security and emulator denylists
+ro.debuggable=0
+ro.secure=1
+ro.adb.secure=1
+ro.build.selinux=0
+ro.boot.verifiedbootstate=green
+ro.boot.flash.locked=1
+ro.boot.vbmeta.device_state=locked
+ro.boot.warranty_bit=0
+sys.oem_unlock_allowed=0
+ro.boot.veritymode=enforcing
+ro.crypto.state=encrypted
+ro.kernel.qemu=0
+ro.boot.qemu=0
+ro.boot.qemu.avd_name=
+ro.boot.qemu.camera_hq_edge_processing=0
+ro.boot.qemu.camera_protocol_ver=0
+ro.boot.qemu.cpuvulkan.version=0
+ro.boot.qemu.gltransport.drawFlushInterval=0
+ro.boot.qemu.gltransport.name=
+ro.boot.qemu.hwcodec.avcdec=0
+ro.boot.qemu.hwcodec.hevcdec=0
+ro.boot.qemu.hwcodec.vpxdec=0
+ro.boot.qemu.settings.system.screen_off_timeout=0
+ro.boot.qemu.virtiowifi=0
+ro.boot.qemu.vsync=0
+
+# Hardware, CPU, memory, and display
+ro.boot.hardware=cheetah
+ro.boot.hardware.vulkan=mali
+ro.boot.hardware.gltransport=
+ro.boot.mode=normal
+ro.product.cpu.abi=arm64-v8a
+ro.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi
+ro.product.cpu.abilist64=arm64-v8a
+ro.product.cpu.abilist32=armeabi-v7a,armeabi
+ro.arch=arm64
+ro.sf.lcd_density=512
+ro.treble.enabled=true
+ro.hardware.vulkan=mali
+ro.hardware.gralloc=gs201
+ro.hardware.power=gs201-power
+ro.hardware.egl=mali
+hardware.cpu.cores=8
+cpuinfo.cores=8
+cpuinfo.bogomips=38.40
+cpuinfo.features=fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti
+cpuinfo.implementer=0x41
+cpuinfo.architecture=8
+cpuinfo.variants=0x1,0x1,0x1,0x1,0x1,0x1,0x1,0x1
+cpuinfo.parts=0xd05,0xd05,0xd05,0xd05,0xd41,0xd41,0xd44,0xd44
+cpuinfo.revisions=0,0,0,0,0,0,0,0
+cpuinfo.hardware=Cheetah
+cpuinfo.revision=0001
+memory.total_kb=12582912
+memory.available_kb=10485760
+memory.class_mb=512
+memory.large_class_mb=1024
+native_heap.scale=4
+screen.width=1440
+screen.height=3120
+screen.density=512
+dalvik.vm.heapsize=576m
+dalvik.vm.heapgrowthlimit=256m
+dalvik.vm.heapmaxfree=8m
+dalvik.vm.heapminfree=512k
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heaptargetutilization=0.75
+
+# Identifiers
+SERIAL_NUMBER=
+ro.serialno=
+ro.boot.serialno=
+ro.bootloader=
+bootloader.prefix=cheetah-1.2
+ANDROID_ID=
+fingerprint.seed=
+
+# Network, Bluetooth, WebView, and GPU
+wifi.mac=
+wifi.bssid=
+wifi.ssid=
+bluetooth.mac=
+bluetooth.name=
+webview.user_agent=Mozilla/5.0 (Linux; Android 16; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36
+gpu.vendor=ARM
+gpu.renderer=Mali-G710 MC10
+gpu.unmasked_vendor=ARM
+gpu.unmasked_renderer=Mali-G710 MC10
+
+# Battery, storage, kernel, locale, and install metadata
+battery.capacity_uah=5050000
+battery.charge_counter_uah=3800000
+battery.energy_counter_nwh=14250000000
+storage.total_bytes=137438953472
+storage.available_bytes=84296499200
+kernel.osrelease=5.10.157-android13-4-00006-g1234567-ab12345
+kernel.version=#1 SMP PREEMPT Tue Dec  3 21:01:46 UTC 2024
+kernel.hostname=localhost
+locale.language=en
+locale.country=US
+install.installer_package=com.android.vending
+install.initiating_package=com.android.vending
+
+# Carrier and GSM
+gsm.operator.alpha=T-Mobile
+gsm.operator.numeric=310260
+gsm.sim.operator.alpha=T-Mobile
+gsm.sim.operator.numeric=310260
+gsm.sim.operator.iso-country=us
+persist.sys.timezone=America/Los_Angeles
+persist.sys.usb.config=none
+
+# Behavior flags
+# hooks.hide_accounts=1 hides AccountManager.getAccounts().
+hooks.hide_accounts=0
+# debug.verbose=1 prints per-hook success/status lines to LSPosed logs.
+debug.verbose=0
+
+# Per-identifier toggles (UI-controlled). 1 = spoof this identifier,
+# 0 = let the original device value pass through. Missing keys default to 1.
+enabled.imei=1
+enabled.meid=1
+enabled.imsi=1
+enabled.iccid=1
+enabled.phone_number=1
+enabled.serial=1
+enabled.android_id=1
+enabled.gsf_id=1
+enabled.bootloader=1
+enabled.gaid=1
+enabled.app_set_id=1
+enabled.media_drm_id=1
+enabled.wifi_mac=1
+enabled.wifi_bssid=1
+enabled.bluetooth_mac=1
+enabled.eid=1
+enabled.build_fingerprint=1
+enabled.build_id=1
+enabled.build_incremental=1
+enabled.security_patch=1
+enabled.fingerprint_seed=1
+
+# Persisted random identifier values. Blank values trigger live generation;
+# the settings UI populates these on first launch.
+identifier.imei=
+identifier.meid=
+identifier.imsi=
+identifier.iccid=
+identifier.phone_number=
+identifier.gsf_id=
+identifier.gaid=
+identifier.app_set_id=
+identifier.media_drm_id=
+euicc.eid=
